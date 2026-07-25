@@ -1,0 +1,53 @@
+/* ========================== CSS Variables ========================== */
+:root {
+  --brown:#000000; --brown-dark:#1a1a1a; --cream:#ffffff; --cream-dark:#f4f4f4;
+  --text:#000000; --text-muted:#555555; --danger:#d32f2f; --border:#dddddd;
+  --radius:12px; --shadow:0 4px 16px rgba(0,0,0,.1); --font: system-ui, -apple-system, sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+body { font-family:var(--font); background:var(--cream); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+/* Auth Layout (Glassmorphism) */
+.auth-overlay { position:fixed; inset:0; background: radial-gradient(circle at center, #333 0%, #000 100%); display:flex; align-items:center; justify-content:center; z-index:9999; }
+.glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-radius: 16px; }
+.auth-card { padding: 32px; width: 100%; max-width: 360px; text-align: center; }
+.auth-card h2 { margin-bottom: 8px; }
+.auth-card p { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+.w-100 { width: 100%; }
+
+/* General Layout */
+#app { display:flex; flex-direction:column; min-height:100vh; }
+.topbar { background:var(--brown); color:#fff; padding:12px 16px; display:flex; align-items:center; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+.topbar-title { flex:1; font-weight:700; margin-left: 10px; }
+.content { flex:1; padding:16px; max-width:800px; margin:0 auto; width:100%; padding-bottom: 80px; }
+.bottomnav { background:#fff; border-top:1px solid var(--border); display:flex; position:fixed; bottom:0; width:100%; z-index:100; }
+.nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; padding:10px 4px; background:transparent; border:none; cursor:pointer; color:var(--text-muted); font-size:11px; font-weight:600; }
+.nav-btn.active { color:var(--brown); border-top: 2px solid var(--brown); }
+.nav-icon { font-size:20px; margin-bottom: 3px; }
+
+/* Components */
+.card { background:#fff; border-radius:var(--radius); border:1px solid var(--border); padding:16px; margin-bottom:12px; box-shadow:var(--shadow); }
+.form-group { margin-bottom:14px; text-align: left; }
+.form-label { font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:5px; display:block; }
+input, select, textarea { width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-family:var(--font); outline:none; }
+button { font-family:var(--font); font-weight:600; cursor:pointer; border-radius:8px; padding:10px 16px; border:none; transition: opacity 0.2s; }
+.btn-primary { background:var(--brown); color:#fff; }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200; display:flex; align-items:flex-end; justify-content:center; }
+.modal { background:#fff; border-radius:20px 20px 0 0; padding:20px; width:100%; max-width:600px; max-height:90vh; overflow-y:auto; }
+.fade-in { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+
+/* POS Interface */
+.pos-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+@media(max-width: 768px) { .pos-layout { grid-template-columns: 1fr; } }
+.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.pos-item-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; user-select: none; transition: transform 0.1s; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+.pos-item-card:active { transform: scale(0.95); background: var(--cream-dark); }
+.pos-item-card .name { font-size: 13px; font-weight: 700; height: 32px; overflow: hidden; }
+.pos-item-card .price { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.pos-cart { background: var(--cream-dark); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; height: 100%; }
+.cart-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+.cart-qty-ctrl { display: flex; align-items: center; gap: 8px; }
+.cart-qty-btn { width: 24px; height: 24px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; font-size: 14px;}

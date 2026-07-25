@@ -7,247 +7,193 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const Database = require('better-sqlite3');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const exceljs = require('exceljs');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
 
-// ==========================
-// Security & Middleware
-// ==========================
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(cors());
 app.use(compression());
-app.use(express.json({ limit: '10mb' })); // Increased for potential base64 logo uploads
+app.use(express.json({ limit: '10mb' }));
 app.use(morgan('common'));
+app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 800, message: { success: false, message: 'Too many requests' } }));
 
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, 
-    max: 500, 
-    message: { success: false, message: 'Too many requests' }
-});
-app.use('/api/', apiLimiter);
+// --- Database & Schema ---
+const db = new Database('./database.db', { verbose: null });
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
-// ==========================
-// Database Initialization
-// ==========================
-const dbPath = process.env.DB_PATH || './database.db';
-const db = new Database(dbPath, { verbose: null });
-db.pragma('journal_mode = WAL'); // Better performance
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shops (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, tagline TEXT, address TEXT, phone TEXT, gst TEXT, currency TEXT DEFAULT '₹', tax_rate REAL DEFAULT 0, logo TEXT, low_stock_alert INTEGER DEFAULT 5, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, name TEXT, mobile TEXT, email TEXT, role TEXT NOT NULL, shop_id TEXT, permissions TEXT, force_password_change INTEGER DEFAULT 1, FOREIGN KEY(shop_id) REFERENCES shops(id)
+  );
+  CREATE TABLE IF NOT EXISTS customers (
+    id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, name TEXT NOT NULL, mobile TEXT, visit_count INTEGER DEFAULT 0, total_purchases REAL DEFAULT 0, last_purchase DATETIME, FOREIGN KEY(shop_id) REFERENCES shops(id)
+  );
+  CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, name TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS units (id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, name TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS items (
+    id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, name TEXT NOT NULL, category TEXT, unit TEXT, buy_price REAL DEFAULT 0, selling_price REAL DEFAULT 0, stock REAL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(shop_id) REFERENCES shops(id)
+  );
+  CREATE TABLE IF NOT EXISTS bills (
+    id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, bill_number TEXT NOT NULL, customer_id TEXT, customer_name TEXT, subtotal REAL, tax REAL, total REAL, payment_mode TEXT DEFAULT 'Cash', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(shop_id) REFERENCES shops(id)
+  );
+  CREATE TABLE IF NOT EXISTS bill_items (
+    id TEXT PRIMARY KEY, bill_id TEXT NOT NULL, item_id TEXT NOT NULL, name TEXT, qty REAL, price REAL, total REAL, FOREIGN KEY(bill_id) REFERENCES bills(id)
+  );
+  CREATE TABLE IF NOT EXISTS stock_logs (
+    id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, item_id TEXT NOT NULL, type TEXT, quantity REAL, reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
-// Auto-init schema if empty
-const schemaPath = path.join(__dirname, 'database', 'schema.sql');
-if (fs.existsSync(schemaPath)) {
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    db.exec(schema);
-    
-    // Insert defaults if empty
-    const settingsCheck = db.prepare('SELECT id FROM settings LIMIT 1').get();
-    if (!settingsCheck) {
-        db.prepare(`INSERT INTO settings (id, shop_name) VALUES (?, ?)`).run(uuidv4(), 'My Shop');
-        db.prepare(`INSERT INTO categories (id, name) VALUES (?, ?)`).run(uuidv4(), 'General');
-        db.prepare(`INSERT INTO units (id, name) VALUES (?, ?)`).run(uuidv4(), 'pcs');
-    }
+// Init Super Admin
+const adminExists = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
+if (!adminExists) {
+  db.prepare('INSERT INTO users (id, username, password_hash, name, role, permissions, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    uuidv4(), 'admin', bcrypt.hashSync('admin123', 10), 'Super Admin', 'admin', JSON.stringify(['ALL']), 1
+  );
 }
 
-// ==========================
-// Utility: Response Formatter
-// ==========================
-const sendSuccess = (res, message, data = null) => res.json({ success: true, message, data });
-const sendError = (res, message, status = 400) => res.status(status).json({ success: false, message });
-
-// ==========================
-// API Routes: Settings
-// ==========================
-app.get('/api/settings', (req, res) => {
-    const settings = db.prepare('SELECT * FROM settings LIMIT 1').get();
-    sendSuccess(res, 'Settings fetched', settings);
-});
-
-app.put('/api/settings', (req, res) => {
-    const { shop_name, tagline, address, phone, gst, currency, tax_rate, low_stock_alert, logo } = req.body;
-    if (!shop_name) return sendError(res, 'Shop name is required');
+// --- Middleware ---
+const auth = (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) throw new Error();
+    req.user = jwt.verify(token, JWT_SECRET);
     
-    const stmt = db.prepare(`
-        UPDATE settings SET 
-        shop_name = ?, tagline = ?, address = ?, phone = ?, gst = ?, 
-        currency = ?, tax_rate = ?, low_stock_alert = ?, logo = ?, updated_at = CURRENT_TIMESTAMP
-    `);
-    stmt.run(shop_name, tagline || '', address || '', phone || '', gst || '', currency || '₹', tax_rate || 0, low_stock_alert || 5, logo || null);
-    sendSuccess(res, 'Settings updated successfully');
+    // Determine active shop (Admin can override via X-Shop-ID)
+    req.shopId = req.user.role === 'admin' ? (req.headers['x-shop-id'] || null) : req.user.shop_id;
+    next();
+  } catch { res.status(401).json({ success: false, message: 'Unauthorized' }); }
+};
+
+const checkPerm = (perm) => (req, res, next) => {
+  if (req.user.role === 'admin') return next();
+  const perms = JSON.parse(req.user.permissions || '[]');
+  if (perms.includes(perm)) next();
+  else res.status(403).json({ success: false, message: 'Forbidden: Missing permission ' + perm });
+};
+
+// --- Auth Routes ---
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  
+  const token = jwt.sign({ id: user.id, role: user.role, shop_id: user.shop_id, permissions: user.permissions }, JWT_SECRET, { expiresIn: '12h' });
+  res.json({ success: true, token, user: { id: user.id, username: user.username, role: user.role, name: user.name, force_password_change: user.force_password_change } });
 });
 
-// ==========================
-// API Routes: Categories & Units
-// ==========================
-app.get('/api/categories', (req, res) => sendSuccess(res, 'Categories fetched', db.prepare('SELECT * FROM categories').all()));
-app.post('/api/categories', (req, res) => {
-    try {
-        db.prepare('INSERT INTO categories (id, name) VALUES (?, ?)').run(uuidv4(), req.body.name);
-        sendSuccess(res, 'Category added');
-    } catch (err) { sendError(res, 'Category already exists'); }
+// --- Shop Management (Admin Only) ---
+app.get('/api/shops', auth, checkPerm('ALL'), (req, res) => {
+  res.json({ success: true, data: db.prepare('SELECT * FROM shops').all() });
+});
+app.post('/api/shops', auth, checkPerm('ALL'), (req, res) => {
+  const id = uuidv4();
+  db.prepare('INSERT INTO shops (id, name, address, phone) VALUES (?, ?, ?, ?)').run(id, req.body.name, req.body.address || '', req.body.phone || '');
+  res.json({ success: true, data: { id } });
 });
 
-app.get('/api/units', (req, res) => sendSuccess(res, 'Units fetched', db.prepare('SELECT * FROM units').all()));
-app.post('/api/units', (req, res) => {
-    try {
-        db.prepare('INSERT INTO units (id, name) VALUES (?, ?)').run(uuidv4(), req.body.name);
-        sendSuccess(res, 'Unit added');
-    } catch (err) { sendError(res, 'Unit already exists'); }
+// --- Staff Management ---
+app.get('/api/staff', auth, checkPerm('Staff Management'), (req, res) => {
+  const query = req.user.role === 'admin' ? 'SELECT id, username, name, mobile, email, role, shop_id, permissions FROM users WHERE role != "admin"' : 'SELECT id, username, name, mobile, email, role, shop_id, permissions FROM users WHERE shop_id = ?';
+  res.json({ success: true, data: db.prepare(query).all(req.shopId) });
+});
+app.post('/api/staff', auth, checkPerm('Staff Management'), (req, res) => {
+  const { username, password, name, mobile, permissions, shop_id } = req.body;
+  try {
+    db.prepare('INSERT INTO users (id, username, password_hash, name, mobile, role, shop_id, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      uuidv4(), username, bcrypt.hashSync(password, 10), name, mobile, 'staff', req.user.role==='admin'?shop_id:req.shopId, JSON.stringify(permissions)
+    );
+    res.json({ success: true, message: 'Staff created' });
+  } catch (e) { res.status(400).json({ success: false, message: 'Username may exist' }); }
 });
 
-// ==========================
-// API Routes: Items
-// ==========================
-app.get('/api/items', (req, res) => sendSuccess(res, 'Items fetched', db.prepare('SELECT * FROM items ORDER BY created_at DESC').all()));
+// --- Core Data APIs (Tenant Isolated) ---
+const requireShop = (req, res, next) => req.shopId ? next() : res.status(400).json({ success: false, message: 'Shop ID required' });
 
-app.post('/api/items', (req, res) => {
-    const { name, category, unit, buy_price, selling_price, stock } = req.body;
-    if (!name || name.length > 150) return sendError(res, 'Valid Item Name required (max 150 chars)');
-    if (stock < 0) return sendError(res, 'Stock cannot be negative');
+app.get('/api/data', auth, requireShop, (req, res) => {
+  const items = db.prepare('SELECT * FROM items WHERE shop_id = ?').all(req.shopId);
+  const categories = db.prepare('SELECT name FROM categories WHERE shop_id = ?').all(req.shopId).map(c=>c.name);
+  const units = db.prepare('SELECT name FROM units WHERE shop_id = ?').all(req.shopId).map(u=>u.name);
+  const settings = db.prepare('SELECT * FROM shops WHERE id = ?').get(req.shopId) || {};
+  res.json({ success: true, data: { items, categories, units, settings } });
+});
 
-    const id = uuidv4();
-    const insertItem = db.prepare(`
-        INSERT INTO items (id, name, category, unit, buy_price, selling_price, stock) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+app.post('/api/items', auth, requireShop, checkPerm('Add Item'), (req, res) => {
+  const { name, category, unit, buy_price, selling_price, stock } = req.body;
+  const id = uuidv4();
+  db.transaction(() => {
+    db.prepare('INSERT INTO items (id, shop_id, name, category, unit, buy_price, selling_price, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, req.shopId, name, category, unit, buy_price, selling_price, stock);
+    if(stock > 0) db.prepare('INSERT INTO stock_logs (id, shop_id, item_id, type, quantity, reason) VALUES (?, ?, ?, ?, ?, ?)').run(uuidv4(), req.shopId, id, 'in', stock, 'Initial');
+  })();
+  res.json({ success: true });
+});
+
+app.post('/api/bills', auth, requireShop, checkPerm('Billing'), (req, res) => {
+  const { customer_name, customer_phone, items, subtotal, tax, total } = req.body;
+  const billId = uuidv4();
+  const bCount = db.prepare('SELECT COUNT(*) as c FROM bills WHERE shop_id = ?').get(req.shopId).c + 1;
+  const bNum = `BT-${bCount.toString().padStart(5, '0')}`;
+  
+  db.transaction(() => {
+    // Handle Customer
+    let custId = null;
+    if (customer_phone) {
+      const c = db.prepare('SELECT id FROM customers WHERE shop_id = ? AND mobile = ?').get(req.shopId, customer_phone);
+      if (c) { custId = c.id; db.prepare('UPDATE customers SET visit_count=visit_count+1, total_purchases=total_purchases+?, last_purchase=CURRENT_TIMESTAMP WHERE id=?').run(total, custId); }
+      else { custId = uuidv4(); db.prepare('INSERT INTO customers (id, shop_id, name, mobile, visit_count, total_purchases, last_purchase) VALUES (?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)').run(custId, req.shopId, customer_name, customer_phone, total); }
+    }
     
-    const insertLog = db.prepare(`INSERT INTO stock_logs (id, item_id, item_name, type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)`);
-
-    const transaction = db.transaction(() => {
-        insertItem.run(id, name, category, unit, buy_price, selling_price, stock);
-        if (stock > 0) insertLog.run(uuidv4(), id, name, 'in', stock, 'Initial stock');
+    db.prepare('INSERT INTO bills (id, shop_id, bill_number, customer_id, customer_name, subtotal, tax, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(billId, req.shopId, bNum, custId, customer_name, subtotal, tax, total);
+    
+    items.forEach(i => {
+      db.prepare('INSERT INTO bill_items (id, bill_id, item_id, name, qty, price, total) VALUES (?, ?, ?, ?, ?, ?, ?)').run(uuidv4(), billId, i.id, i.name, i.qty, i.price, i.qty * i.price);
+      db.prepare('UPDATE items SET stock = MAX(0, stock - ?) WHERE id = ?').run(i.qty, i.id);
+      db.prepare('INSERT INTO stock_logs (id, shop_id, item_id, type, quantity, reason) VALUES (?, ?, ?, ?, ?, ?)').run(uuidv4(), req.shopId, i.id, 'out', i.qty, `Bill ${bNum}`);
     });
-
-    transaction();
-    sendSuccess(res, 'Item created successfully');
+  })();
+  res.json({ success: true, data: { bill_number: bNum } });
 });
 
-app.put('/api/items/:id', (req, res) => {
-    const { name, category, unit, buy_price, selling_price, stock } = req.body;
-    if (stock < 0) return sendError(res, 'Stock cannot be negative');
-    
-    const oldItem = db.prepare('SELECT stock FROM items WHERE id = ?').get(req.params.id);
-    if (!oldItem) return sendError(res, 'Item not found', 404);
-
-    const updateItem = db.prepare(`
-        UPDATE items SET name = ?, category = ?, unit = ?, buy_price = ?, selling_price = ?, stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `);
-    
-    const transaction = db.transaction(() => {
-        updateItem.run(name, category, unit, buy_price, selling_price, stock, req.params.id);
-        const diff = stock - oldItem.stock;
-        if (diff !== 0) {
-            const type = diff > 0 ? 'in' : 'out';
-            db.prepare(`INSERT INTO stock_logs (id, item_id, item_name, type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)`)
-              .run(uuidv4(), req.params.id, name, type, Math.abs(diff), 'Manual adjustment');
-        }
-    });
-
-    transaction();
-    sendSuccess(res, 'Item updated');
+// --- Excel Export (Reporting) ---
+app.get('/api/reports/export', auth, requireShop, checkPerm('Export Excel'), async (req, res) => {
+  const { type, start, end } = req.query; // type: 'bills', 'inventory'
+  const workbook = new exceljs.Workbook();
+  const sheet = workbook.addWorksheet(type.toUpperCase());
+  
+  if (type === 'inventory') {
+    sheet.columns = [
+      { header: 'Item Name', key: 'name', width: 25 }, { header: 'Category', key: 'category', width: 15 },
+      { header: 'Stock', key: 'stock', width: 10 }, { header: 'Selling Price', key: 'price', width: 15 }
+    ];
+    const data = db.prepare('SELECT name, category, stock, selling_price as price FROM items WHERE shop_id = ?').all(req.shopId);
+    sheet.addRows(data);
+  } else if (type === 'bills') {
+    sheet.columns = [
+      { header: 'Bill No', key: 'bill_number', width: 15 }, { header: 'Date', key: 'created_at', width: 20 },
+      { header: 'Customer', key: 'customer_name', width: 20 }, { header: 'Total', key: 'total', width: 15 }
+    ];
+    let query = 'SELECT bill_number, created_at, customer_name, total FROM bills WHERE shop_id = ?';
+    const params = [req.shopId];
+    if (start && end) { query += ' AND date(created_at) BETWEEN ? AND ?'; params.push(start, end); }
+    sheet.addRows(db.prepare(query).all(...params));
+  }
+  
+  sheet.getRow(1).font = { bold: true };
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename=${type}-report.xlsx`);
+  await workbook.xlsx.write(res);
+  res.end();
 });
 
-app.delete('/api/items/:id', (req, res) => {
-    db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
-    sendSuccess(res, 'Item deleted');
-});
-
-// ==========================
-// API Routes: Stock Operations
-// ==========================
-app.post('/api/stock', (req, res) => {
-    const { itemId, qty, type, supplier, reason, notes } = req.body; // type: 'in' or 'out'
-    if (qty <= 0) return sendError(res, 'Invalid quantity');
-    
-    const item = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId);
-    if (!item) return sendError(res, 'Item not found', 404);
-    if (type === 'out' && qty > item.stock) return sendError(res, 'Insufficient stock');
-
-    const newStock = type === 'in' ? item.stock + qty : item.stock - qty;
-
-    const transaction = db.transaction(() => {
-        db.prepare('UPDATE items SET stock = ? WHERE id = ?').run(newStock, itemId);
-        db.prepare(`INSERT INTO stock_logs (id, item_id, item_name, type, quantity, supplier, reason, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(uuidv4(), itemId, item.name, type, qty, supplier || null, reason || null, notes || null);
-    });
-
-    transaction();
-    sendSuccess(res, `Stock updated successfully`);
-});
-
-// ==========================
-// API Routes: Billing
-// ==========================
-app.post('/api/bills', (req, res) => {
-    const { customer_name, customer_phone, items, subtotal, tax, total } = req.body;
-    if (!items || items.length === 0) return sendError(res, 'No items in bill');
-
-    // Auto-generate Bill Number (BT-000001 format)
-    const count = db.prepare('SELECT COUNT(*) as count FROM bills').get().count + 1;
-    const bill_number = `BT-${count.toString().padStart(6, '0')}`;
-    const billId = uuidv4();
-
-    const insertBill = db.prepare(`
-        INSERT INTO bills (id, bill_number, customer_name, customer_phone, subtotal, tax, total) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertBillItem = db.prepare(`INSERT INTO bill_items (id, bill_id, item_id, name, qty, price, total) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    const updateStock = db.prepare(`UPDATE items SET stock = MAX(0, stock - ?) WHERE id = ?`);
-    const insertLog = db.prepare(`INSERT INTO stock_logs (id, item_id, item_name, type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)`);
-
-    const transaction = db.transaction(() => {
-        insertBill.run(billId, bill_number, customer_name, customer_phone, subtotal, tax, total);
-        
-        for (const item of items) {
-            insertBillItem.run(uuidv4(), billId, item.itemId, item.name, item.qty, item.price, item.qty * item.price);
-            updateStock.run(item.qty, item.itemId);
-            insertLog.run(uuidv4(), item.itemId, item.name, 'bill', item.qty, `Bill ${bill_number}`);
-        }
-    });
-
-    transaction();
-    sendSuccess(res, 'Bill generated', { bill_number });
-});
-
-app.get('/api/bills', (req, res) => {
-    const bills = db.prepare('SELECT * FROM bills ORDER BY created_at DESC').all();
-    const billsWithItems = bills.map(b => {
-        b.items = db.prepare('SELECT * FROM bill_items WHERE bill_id = ?').all(b.id);
-        return b;
-    });
-    sendSuccess(res, 'Bills fetched', billsWithItems);
-});
-
-// ==========================
-// API Routes: Dashboard & History
-// ==========================
-app.get('/api/dashboard', (req, res) => {
-    const totalItems = db.prepare('SELECT COUNT(*) as count FROM items').get().count;
-    const lowStockAlert = db.prepare('SELECT low_stock_alert FROM settings LIMIT 1').get().low_stock_alert;
-    const lowStockItems = db.prepare('SELECT COUNT(*) as count FROM items WHERE stock <= ?').get(lowStockAlert).count;
-    
-    const today = new Date().toISOString().split('T')[0];
-    const todaysRevenue = db.prepare("SELECT COALESCE(SUM(total), 0) as sum FROM bills WHERE date(created_at) = ?").get(today).sum;
-    const totalRevenue = db.prepare("SELECT COALESCE(SUM(total), 0) as sum FROM bills").get().sum;
-    const todaysBills = db.prepare("SELECT COUNT(*) as count FROM bills WHERE date(created_at) = ?").get(today).count;
-
-    sendSuccess(res, 'Dashboard data', { totalItems, lowStockItems, todaysRevenue, totalRevenue, todaysBills });
-});
-
-app.get('/api/history', (req, res) => {
-    const logs = db.prepare('SELECT * FROM stock_logs ORDER BY created_at DESC').all();
-    sendSuccess(res, 'Logs fetched', logs);
-});
-
-// ==========================
-// Error Handling
-// ==========================
-app.use((req, res) => res.status(404).json({ success: false, message: 'Endpoint not found' }));
-app.use((err, req, res, next) => {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Internal Server Error' });
-});
-
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+app.use(express.static('public')); // Serve frontend files from public folder
+app.listen(PORT, () => console.log(`🚀 Production Server running on port ${PORT}`));

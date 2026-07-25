@@ -378,12 +378,12 @@ function doStockOut(){
 // ─── Dynamic Dropdown Handlers ────────────────────────────────────────────────
 function getCategoryOptions(selectedCat) {
   let html = state.categories.map(c => `<option ${c===selectedCat ? 'selected' : ''}>${c}</option>`).join('');
-  html += `<option value="__NEW__">+ Add New Category</option>`;
+  html += `<option value="Box">+ Add New Category</option>`;
   return html;
 }
 
 function handleCatChange(sel) {
-  if (sel.value === '__NEW__') {
+  if (sel.value === 'Box') {
     let newCat = prompt("Enter new category name:");
     if (newCat && newCat.trim() !== '') {
       newCat = newCat.trim();
@@ -403,12 +403,12 @@ function handleCatChange(sel) {
 
 function getUnitOptions(selectedUnit) {
   let html = state.units.map(u => `<option ${u===selectedUnit ? 'selected' : ''}>${u}</option>`).join('');
-  html += `<option value="__NEW__">+ Add New Unit</option>`;
+  html += `<option value="Box">+ Add New Unit</option>`;
   return html;
 }
 
 function handleUnitChange(sel) {
-  if (sel.value === '__NEW__') {
+  if (sel.value === 'Box') {
     // Create inline mini-modal for adding a new unit
     const overlay = document.createElement('div');
     overlay.style = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;";
