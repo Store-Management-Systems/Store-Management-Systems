@@ -163,7 +163,7 @@
 <div id="app">
   <!-- Top Bar -->
   <div class="topbar">
-    <div class="topbar-logo" id="topbarLogo">🧁</div>
+    <div class="topbar-logo" id="topbarLogo">bumblebee.jpg</div>
     <div class="topbar-title" id="topbarTitle">Shop Management System</div>
     <button onclick="showSection('settings')" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:18px;">⚙</button>
   </div>
@@ -271,7 +271,7 @@ function updateTopbar(){
   if(state.shop.logo){
     logo.innerHTML = `<img src="${state.shop.logo}" alt="logo">`;
   } else {
-    logo.innerHTML = '🧁';
+    logo.innerHTML = 'bumblebee.jpg';
   }
 }
 
@@ -498,8 +498,8 @@ function doStockOut(){
 }
 
 // ─── Add/Edit Item Modal ──────────────────────────────────────────────────────
-const EMOJIS = ['🥐','🥖','🍞','🧁','🎂','🍰','🍩','🍪','🧇','🥞','🍫','🥛','☕','🧃','🍓','🍋','🥚','🧈','🍯','🌾','🧂','🫙','🥤','📦'];
-const CATS = ['Breads','Cakes','Pastries','Beverages','Ingredients','Cookies','Others'];
+// const EMOJIS = ['🥐','🥖','🍞','bumblebee.jpg','🎂','🍰','🍩','🍪','🧇','🥞','🍫','🥛','☕','🧃','🍓','🍋','🥚','🧈','🍯','🌾','🧂','🫙','🥤','📦'];
+// const CATS = ['Breads','Cakes','Pastries','Beverages','Ingredients','Cookies','Others'];
 const UNITS = ['pcs','kg','g','l','ml','dozen','box','pack','bag'];
 
 function openAddItem(){
@@ -789,7 +789,7 @@ function buildReceipt(bill){
   return `
     <div class="receipt">
       <div class="receipt-center">
-        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">🧁</div>`}
+        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">bumblebee.jpg</div>`}
         <div style="font-weight:700;font-size:15px;">${b.name}</div>
         ${b.tagline ? `<div style="font-size:11px;">${b.tagline}</div>` : ''}
         ${b.address ? `<div style="font-size:10px;">${b.address}</div>` : ''}
@@ -934,12 +934,12 @@ function renderSettings(c){
   c.innerHTML = `
   <div class="fade-in">
     <div class="card">
-      <h3 style="margin-bottom:14px;">🏪 shop Profile</h3>
+      <h3 style="margin-bottom:14px;">🏪 Shop Profile</h3>
       
       <div class="form-group" style="text-align:center;">
-        <label class="form-label">shop Logo</label>
+        <label class="form-label">Shop Logo</label>
         <div class="logo-upload" onclick="document.getElementById('logoFile').click()">
-          ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">🧁</div>`}
+          ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">bumblebee.jpg</div>`}
           <div style="font-size:13px;color:var(--text-muted);">Tap to upload logo</div>
           <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Appears on bills & receipt</div>
         </div>
