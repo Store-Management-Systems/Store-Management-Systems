@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Luxury Infinite Loader</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:Arial,sans-serif;background:#050505}
+body{
+display:flex;align-items:center;justify-content:center;
+background:linear-gradient(135deg,#050505,#111,#050505);
+background-size:300% 300%;
+animation:bg 12s ease infinite;
+color:#fff}
+@keyframes bg{0%,100%{background-position:0 50%}50%{background-position:100% 50%}}
+#particles span{
+position:absolute;border-radius:50%;
+background:rgba(0,229,255,.35);
+animation:float linear infinite;
+filter:blur(.5px)}
+@keyframes float{
+from{transform:translateY(110vh) scale(.3)}
+to{transform:translateY(-20vh) scale(1.2)}
+}
+.card{
+width:min(92vw,460px);
+padding:35px;border-radius:24px;
+background:rgba(255,255,255,.08);
+backdrop-filter:blur(18px);
+border:1px solid rgba(255,255,255,.15);
+box-shadow:0 0 40px rgba(0,229,255,.12);
+text-align:center}
+h1{font-size:clamp(28px,4vw,42px);margin-bottom:8px}
+p{opacity:.8;margin-bottom:25px}
+.loader{
+height:12px;border-radius:20px;overflow:hidden;
+background:#222;position:relative}
+.bar{
+height:100%;width:35%;
+background:linear-gradient(90deg,#00e5ff,#7c4dff,#00ffc8);
+border-radius:20px;
+position:absolute;
+animation:slide 1.8s linear infinite}
+@keyframes slide{
+0%{left:-35%}
+100%{left:100%}
+}
+.glow{
+margin:24px auto 0;
+width:90px;height:90px;border-radius:50%;
+border:3px solid rgba(0,229,255,.4);
+box-shadow:0 0 40px #00e5ff inset,0 0 35px #00e5ff;
+animation:spin 5s linear infinite}
+.glow:before{
+content:"";
+position:absolute}
+@keyframes spin{to{transform:rotate(360deg)}}
+small{display:block;margin-top:20px;opacity:.55;letter-spacing:3px}
+</style>
+</head>
+<body>
+<div id="particles"></div>
+<div class="card">
+<h1>Loading...</h1>
+<p>Preparing your experience</p>
+<div class="loader"><div class="bar"></div></div>
+<div class="glow"></div>
+<small>PLEASE WAIT</small>
+</div>
+<script>
+const p=document.getElementById("particles");
+for(let i=0;i<45;i++){
+ let s=document.createElement("span");
+ let size=Math.random()*8+2;
+ s.style.width=size+"px";
+ s.style.height=size+"px";
+ s.style.left=Math.random()*100+"vw";
+ s.style.animationDuration=(6+Math.random()*8)+"s";
+ s.style.animationDelay=(-Math.random()*12)+"s";
+ p.appendChild(s);
+}
+</script>
+</body>
+</html>
