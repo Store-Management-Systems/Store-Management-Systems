@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+.env*.local
+.DS_Store
+.gstack/
+.superpowers
+docs/superpowers
+*.tsbuildinfo
+.vercel
+.env*
