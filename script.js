@@ -1,120 +1,136 @@
-const API_URL = 'http://localhost:3000/api';
+// ─── Dynamic Dropdown Handlers (Updated for Backend) ───────────────────────────
 
-// Replace your existing loadState with this async setup:
-async function loadState() {
-  try {
-    const [settings, items, categories, units, bills, logs, dash] = await Promise.all([
-      fetch(`${API_URL}/settings`).then(r => r.json()),
-      fetch(`${API_URL}/items`).then(r => r.json()),
-      fetch(`${API_URL}/categories`).then(r => r.json()),
-      fetch(`${API_URL}/units`).then(r => r.json()),
-      fetch(`${API_URL}/bills`).then(r => r.json()),
-      fetch(`${API_URL}/history`).then(r => r.json()),
-      fetch(`${API_URL}/dashboard`).then(r => r.json())
-    ]);
-
-    state.shop = settings.data || state.shop;
-    state.items = items.data.map(i => ({...i, qty: i.stock, price: i.selling_price, buyPrice: i.buy_price}));
-    state.categories = categories.data.map(c => c.name);
-    state.units = units.data.map(u => u.name);
-    state.bills = bills.data.map(b => ({
-        ...b, 
-        billNo: b.bill_number, 
-        date: b.created_at,
-        customerName: b.customer_name,
-        customerPhone: b.customer_phone 
-    }));
-    state.logs = logs.data.map(l => ({...l, itemName: l.item_name, qty: l.quantity, date: l.created_at}));
-    
-    updateTopbar();
-    showSection('dashboard');
-  } catch (error) {
-    console.error("Failed to load backend state", error);
-    toast("Error connecting to server");
+async function handleCatChange(sel) {
+  if (sel.value === '__NEW__') {
+    let newCat = prompt("Enter new category name:");
+    if (newCat && newCat.trim() !== '') {
+      newCat = newCat.trim();
+      
+      if (!state.categories.includes(newCat)) {
+        try {
+          // Send new category to backend
+          const res = await fetch(`${API_URL}/categories`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newCat })
+          });
+          
+          if (res.ok) {
+            state.categories.push(newCat);
+            toast('✅ Category added');
+          } else {
+            const data = await res.json();
+            alert(data.message || 'Failed to add category');
+            sel.value = sel.dataset.prev || (state.categories[0] || '');
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+          alert('Error connecting to server');
+          sel.value = sel.dataset.prev || (state.categories[0] || '');
+          return;
+        }
+      }
+      
+      sel.innerHTML = getCategoryOptions(newCat);
+      sel.value = newCat;
+      sel.dataset.prev = newCat;
+    } else {
+      sel.value = sel.dataset.prev || (state.categories[0] || '');
+    }
+  } else {
+    sel.dataset.prev = sel.value;
   }
 }
 
-// Map frontend save operations to specific backend endpoints
-async function saveItem(id) {
-    // ... your existing validation logic ...
+function handleUnitChange(sel) {
+  if (sel.value === '__NEW__') {
+    // Create inline mini-modal for adding a new unit
+    const overlay = document.createElement('div');
+    overlay.style = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;";
     
-    const itemData = {
-        name, category: document.getElementById('itemCat').value,
-        unit: document.getElementById('itemUnit').value,
-        buy_price: buyPrice, selling_price: price, stock: qty
+    overlay.innerHTML = `
+      <div class="card fade-in" style="width:100%;max-width:320px;margin:0;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.5);">
+        <h3 style="margin-bottom:16px;text-align:center;">Add New Unit</h3>
+        <div class="form-group">
+          <label class="form-label">Unit Name</label>
+          <input type="text" id="newUnitInput" placeholder="Unit name" maxlength="20">
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button class="btn-primary" style="flex:1;" id="saveUnitBtn">Save</button>
+          <button class="btn-secondary" style="flex:1;" id="cancelUnitBtn">Cancel</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    const input = document.getElementById('newUnitInput');
+    input.focus();
+
+    const closeOverlay = () => document.body.removeChild(overlay);
+
+    document.getElementById('cancelUnitBtn').onclick = () => {
+      sel.value = sel.dataset.prev || (state.units[0] || '');
+      closeOverlay();
     };
 
-    const url = id ? `${API_URL}/items/${id}` : `${API_URL}/items`;
-    const method = id ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemData)
-    });
-    
-    if (res.ok) {
-        closeModal();
-        await loadState(); // Refresh state from DB
-        toast(id ? '✅ Item updated' : '✅ Item added');
-    }
-}
-
-async function doStockIn() {
-    // ... your existing logic to gather data ...
-    await fetch(`${API_URL}/stock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId, qty, type: 'in', supplier: document.getElementById('siSupplier').value, notes: document.getElementById('siNotes').value })
-    });
-    await loadState();
-    toast(`✅ Stock Added`);
-}
-
-async function generateBill() {
-    // ... your existing validation ...
-    const billData = {
-        customer_name: billCustomer.name,
-        customer_phone: billCustomer.phone,
-        items: billItems, subtotal, tax, total
+    document.getElementById('saveUnitBtn').onclick = async () => {
+      let newUnit = input.value.trim();
+      
+      if (newUnit === '') {
+        alert('Unit name cannot be empty.');
+        return;
+      }
+      if (newUnit.length > 20) {
+        alert('Unit name cannot exceed 20 characters.');
+        return;
+      }
+      
+      const exists = state.units.find(u => u.toLowerCase() === newUnit.toLowerCase());
+      if (exists) {
+        alert('This unit already exists.');
+        sel.innerHTML = getUnitOptions(exists);
+        sel.value = exists;
+        sel.dataset.prev = exists;
+        closeOverlay();
+        return;
+      }
+      
+      try {
+        // Send new unit to backend
+        const res = await fetch(`${API_URL}/units`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newUnit })
+        });
+        
+        if (res.ok) {
+          state.units.push(newUnit);
+          sel.innerHTML = getUnitOptions(newUnit);
+          sel.value = newUnit;
+          sel.dataset.prev = newUnit;
+          toast('✅ Unit added');
+        } else {
+          const data = await res.json();
+          alert(data.message || 'Failed to add unit');
+          sel.value = sel.dataset.prev || (state.units[0] || '');
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Error connecting to server');
+        sel.value = sel.dataset.prev || (state.units[0] || '');
+      }
+      
+      closeOverlay();
     };
 
-    const res = await fetch(`${API_URL}/bills`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(billData)
-    });
-    const result = await res.json();
-    
-    await loadState();
-    billItems = []; billCustomer = {name:'', phone:''};
-    // Fetch the specific generated bill to pass to showBillReceipt
-    const newBill = state.bills.find(b => b.billNo === result.data.bill_number);
-    showBillReceipt(newBill);
-}
-
-async function saveSettings() {
-    // ... gather DOM elements ...
-    const settingsData = {
-        shop_name: document.getElementById('setName').value.trim(),
-        tagline: document.getElementById('setTagline').value.trim(),
-        address: document.getElementById('setAddress').value.trim(),
-        phone: document.getElementById('setPhone').value.trim(),
-        gst: document.getElementById('setGst').value.trim(),
-        currency: document.getElementById('setCurrency').value,
-        tax_rate: parseFloat(document.getElementById('setTax').value) || 0,
-        low_stock_alert: parseInt(document.getElementById('setLowStock').value) || 5,
-        logo: state.shop.logo // Assuming logo is updated in state during file read
+    // Support Enter key submission
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') document.getElementById('saveUnitBtn').click();
     };
-
-    await fetch(`${API_URL}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsData)
-    });
     
-    await loadState();
-    toast('✅ Settings saved');
+  } else {
+    sel.dataset.prev = sel.value;
+  }
 }
-
-// Delete the old synchronous saveState() function and replace any remaining calls with await loadState() to sync UI.
