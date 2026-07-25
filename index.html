@@ -7,18 +7,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#7c4a1e">
-<title>Bakery Manager</title>
+<title>Shop Management System</title>
 <link rel="manifest" href="#" />
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   :root{
-    --brown:#7c4a1e;--brown-dark:#5a3414;--brown-light:#a0622a;
-    --cream:#fdf6ee;--cream-dark:#f5e8d3;--warm-white:#fffcf8;
-    --text:#2c1a0e;--text-muted:#7a5c3e;--text-light:#b08060;
-    --success:#2d7a3a;--danger:#c0392b;--warn:#b8860b;
-    --border:#e8d5bb;--border-strong:#c9a97a;
-    --radius:12px;--shadow:0 2px 12px rgba(100,60,20,0.12);
-    --font:'Segoe UI',system-ui,sans-serif;
+  --grey: #6c757d; --grey-dark: #343a40; --grey-light: #adb5bd;
+  --light-grey: #f8f9fa; --light-grey-dark: #e9ecef; --cool-white: #ffffff;
+  --text: #212529; --text-muted: #6c757d; --text-light: #ced4da;
+  --success: #2d7a3a; --danger: #c0392b; --warn: #b8860b;
+  --border: #dee2e6; --border-strong: #adb5bd;
+  --radius: 12px; --shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  --font: 'Times New Roman', Times, serif;
   }
   body{font-family:var(--font);background:var(--cream);color:var(--text);min-height:100vh;overflow-x:hidden;}
   h1{font-size:22px;font-weight:700;}h2{font-size:18px;font-weight:600;}h3{font-size:16px;font-weight:600;}
@@ -163,7 +163,7 @@
   <!-- Top Bar -->
   <div class="topbar">
     <div class="topbar-logo" id="topbarLogo">🧁</div>
-    <div class="topbar-title" id="topbarTitle">Bakery Manager</div>
+    <div class="topbar-title" id="topbarTitle">Shop Management System</div>
     <button onclick="showSection('settings')" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:18px;">⚙</button>
   </div>
 
@@ -204,16 +204,16 @@
 <script>
 // ─── State ───────────────────────────────────────────────────────────────────
 let state = {
-  bakery: {
-    name: 'My Bakery',
-    tagline: 'Fresh & Delicious',
-    address: '123 Baker Street',
+  shop: {
+    name: 'My Shop',
+    tagline: 'Shop Now! or Never',
+    address: '123 Wall Street',
     phone: '9876543210',
     gst: '',
     logo: null,
     currency: '₹',
     taxRate: 0,
-    lowStockAlert: 5
+    lowStockAlert: 2
   },
   items: [],
   bills: [],
@@ -224,7 +224,7 @@ let state = {
 // Load from localStorage
 function loadState(){
   try{
-    const saved = localStorage.getItem('bakery_state');
+    const saved = localStorage.getItem('shop_state');
     if(saved) state = {...state, ...JSON.parse(saved)};
     if(!state.items) state.items = [];
     if(!state.bills) state.bills = [];
@@ -234,7 +234,7 @@ function loadState(){
 }
 
 function saveState(){
-  localStorage.setItem('bakery_state', JSON.stringify(state));
+  localStorage.setItem('shop_state', JSON.stringify(state));
 }
 
 loadState();
@@ -266,9 +266,9 @@ function renderSection(name){
 function updateTopbar(){
   const logo = document.getElementById('topbarLogo');
   const title = document.getElementById('topbarTitle');
-  title.textContent = state.bakery.name;
-  if(state.bakery.logo){
-    logo.innerHTML = `<img src="${state.bakery.logo}" alt="logo">`;
+  title.textContent = state.shop.name;
+  if(state.shop.logo){
+    logo.innerHTML = `<img src="${state.shop.logo}" alt="logo">`;
   } else {
     logo.innerHTML = '🧁';
   }
@@ -277,7 +277,7 @@ function updateTopbar(){
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function renderDashboard(c){
   const totalItems = state.items.length;
-  const lowStock = state.items.filter(i => i.qty <= state.bakery.lowStockAlert).length;
+  const lowStock = state.items.filter(i => i.qty <= state.shop.lowStockAlert).length;
   const todayBills = state.bills.filter(b => {
     const d = new Date(b.date); const now = new Date();
     return d.toDateString() === now.toDateString();
@@ -298,7 +298,7 @@ function renderDashboard(c){
         <div class="stat-label">Low Stock</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${state.bakery.currency}${todayRevenue.toFixed(0)}</div>
+        <div class="stat-value">${state.shop.currency}${todayRevenue.toFixed(0)}</div>
         <div class="stat-label">Today's Revenue</div>
       </div>
       <div class="stat-card">
@@ -329,7 +329,7 @@ function renderDashboard(c){
               <div style="font-size:11px;color:var(--text-muted);">${b.customerName||'Walk-in'} · ${formatDate(b.date)}</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-size:15px;font-weight:700;color:var(--brown);">${state.bakery.currency}${b.total.toFixed(2)}</div>
+              <div style="font-size:15px;font-weight:700;color:var(--brown);">${state.shop.currency}${b.total.toFixed(2)}</div>
               <button class="btn-sm btn-secondary" onclick="viewBill('${b.id}')" style="margin-top:4px;">View</button>
             </div>
           </div>
@@ -337,10 +337,10 @@ function renderDashboard(c){
       }
     </div>
 
-    ${state.items.filter(i => i.qty <= state.bakery.lowStockAlert).length > 0 ? `
+    ${state.items.filter(i => i.qty <= state.shop.lowStockAlert).length > 0 ? `
     <div class="card">
       <div class="card-header"><h3>⚠ Low Stock Items</h3></div>
-      ${state.items.filter(i => i.qty <= state.bakery.lowStockAlert).map(i => `
+      ${state.items.filter(i => i.qty <= state.shop.lowStockAlert).map(i => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:14px;">${i.emoji||'📦'} ${i.name}</div>
           <span class="badge badge-danger">${i.qty} ${i.unit}</span>
@@ -383,11 +383,11 @@ function renderAllStock(items){
     <button class="btn-primary" style="width:100%;margin-bottom:12px;" onclick="openAddItem()">➕ Add New Item</button>
     ${items.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">📦</div><p>No items found. Add your first item!</p></div>` :
       items.map(item => `
-        <div class="stock-item ${item.qty <= state.bakery.lowStockAlert ? 'low-stock' : 'ok-stock'}">
+        <div class="stock-item ${item.qty <= state.shop.lowStockAlert ? 'low-stock' : 'ok-stock'}">
           <div class="stock-icon">${item.emoji||'📦'}</div>
           <div class="stock-info">
             <div class="stock-name">${item.name}</div>
-            <div class="stock-meta">${state.bakery.currency}${item.price.toFixed(2)} · ${item.category||'General'}</div>
+            <div class="stock-meta">${state.shop.currency}${item.price.toFixed(2)} · ${item.category||'General'}</div>
           </div>
           <div class="stock-qty">
             <div class="qty-num">${item.qty}</div>
@@ -526,7 +526,7 @@ function openAddItem(){
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Selling Price (${state.bakery.currency})</label>
+        <label class="form-label">Selling Price (${state.shop.currency})</label>
         <input type="number" id="itemPrice" placeholder="0.00" min="0" step="0.01">
       </div>
       <div class="form-group">
@@ -564,7 +564,7 @@ function openEditItem(id){
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Selling Price (${state.bakery.currency})</label>
+        <label class="form-label">Selling Price (${state.shop.currency})</label>
         <input type="number" id="itemPrice" value="${item.price}" min="0" step="0.01">
       </div>
       <div class="form-group">
@@ -625,7 +625,7 @@ let billCustomer = {name:'', phone:''};
 
 function renderBill(c){
   const subtotal = billItems.reduce((s,bi) => s + bi.qty * bi.price, 0);
-  const tax = subtotal * state.bakery.taxRate / 100;
+  const tax = subtotal * state.shop.taxRate / 100;
   const total = subtotal + tax;
 
   c.innerHTML = `
@@ -655,10 +655,10 @@ function renderBill(c){
             <div class="bill-item-row">
               <div style="flex:1;min-width:0;">
                 <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${bi.emoji||'📦'} ${bi.name}</div>
-                <div style="font-size:11px;color:var(--text-muted);">${state.bakery.currency}${bi.price.toFixed(2)} each</div>
+                <div style="font-size:11px;color:var(--text-muted);">${state.shop.currency}${bi.price.toFixed(2)} each</div>
               </div>
               <input type="number" min="0.01" step="0.01" value="${bi.qty}" style="width:65px;text-align:center;" onchange="updateBillQty(${idx},this.value)">
-              <div style="min-width:65px;text-align:right;font-weight:600;font-size:14px;">${state.bakery.currency}${(bi.qty*bi.price).toFixed(2)}</div>
+              <div style="min-width:65px;text-align:right;font-weight:600;font-size:14px;">${state.shop.currency}${(bi.qty*bi.price).toFixed(2)}</div>
               <button onclick="removeBillItem(${idx})" style="background:var(--danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:14px;cursor:pointer;">✕</button>
             </div>
           `).join('')
@@ -667,9 +667,9 @@ function renderBill(c){
 
       ${billItems.length > 0 ? `
       <div class="bill-summary">
-        <div class="summary-row"><span>Subtotal</span><span>${state.bakery.currency}${subtotal.toFixed(2)}</span></div>
-        ${state.bakery.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.bakery.taxRate}%)</span><span>${state.bakery.currency}${tax.toFixed(2)}</span></div>` : ''}
-        <div class="summary-row summary-total"><span>Total</span><span>${state.bakery.currency}${total.toFixed(2)}</span></div>
+        <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${subtotal.toFixed(2)}</span></div>
+        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${tax.toFixed(2)}</span></div>` : ''}
+        <div class="summary-row summary-total"><span>Total</span><span>${state.shop.currency}${total.toFixed(2)}</span></div>
       </div>
       <button class="btn-primary" style="width:100%;margin-top:12px;padding:14px;font-size:16px;" onclick="generateBill()">🧾 Generate Bill</button>
       ` : ''}
@@ -684,7 +684,7 @@ function addBillItem(){
       <label class="form-label">Select Item</label>
       <select id="billItemSel" onchange="updateBillItemPrice(this.value)">
         <option value="">Choose item...</option>
-        ${state.items.map(i => `<option value="${i.id}" data-price="${i.price}" data-emoji="${i.emoji||'📦'}">${i.emoji||'📦'} ${i.name} — ${state.bakery.currency}${i.price.toFixed(2)} (${i.qty} ${i.unit})</option>`).join('')}
+        ${state.items.map(i => `<option value="${i.id}" data-price="${i.price}" data-emoji="${i.emoji||'📦'}">${i.emoji||'📦'} ${i.name} — ${state.shop.currency}${i.price.toFixed(2)} (${i.qty} ${i.unit})</option>`).join('')}
       </select>
     </div>
     <div class="form-row">
@@ -693,7 +693,7 @@ function addBillItem(){
         <input type="number" id="billItemQty" value="1" min="0.01" step="0.01">
       </div>
       <div class="form-group">
-        <label class="form-label">Price (${state.bakery.currency})</label>
+        <label class="form-label">Price (${state.shop.currency})</label>
         <input type="number" id="billItemPrice" value="" placeholder="Auto" min="0" step="0.01">
       </div>
     </div>
@@ -737,7 +737,7 @@ function removeBillItem(idx){
 function generateBill(){
   if(billItems.length === 0){ alert('Add items to the bill'); return; }
   const subtotal = billItems.reduce((s,bi) => s + bi.qty * bi.price, 0);
-  const tax = subtotal * state.bakery.taxRate / 100;
+  const tax = subtotal * state.shop.taxRate / 100;
   const total = subtotal + tax;
   const now = new Date();
   const billNo = state.nextBillNo++;
@@ -755,7 +755,7 @@ function generateBill(){
     customerPhone: billCustomer.phone,
     items: [...billItems],
     subtotal, tax, total,
-    taxRate: state.bakery.taxRate,
+    taxRate: state.shop.taxRate,
     date: now.toISOString()
   };
   state.bills.push(bill);
@@ -781,7 +781,7 @@ function showBillReceipt(bill){
 }
 
 function buildReceipt(bill){
-  const b = state.bakery;
+  const b = state.shop;
   const dt = new Date(bill.date);
   const dateStr = dt.toLocaleDateString('en-IN');
   const timeStr = dt.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
@@ -881,7 +881,7 @@ function renderHistoryBills(){
           <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${b.items.map(i=>`${i.name} x${i.qty}`).join(', ')}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:17px;font-weight:700;color:var(--brown);">${state.bakery.currency}${b.total.toFixed(2)}</div>
+          <div style="font-size:17px;font-weight:700;color:var(--brown);">${state.shop.currency}${b.total.toFixed(2)}</div>
           <button class="btn-sm btn-secondary" style="margin-top:6px;" onclick="viewBill('${b.id}')">🧾 View</button>
         </div>
       </div>
@@ -910,7 +910,7 @@ function renderHistoryLogs(){
           ${l.items?`<div style="font-size:11px;color:var(--text-muted);">${l.items}</div>`:''}
         </div>
         <div style="text-align:right;">
-          ${l.total ? `<div style="font-weight:700;color:var(--brown);">${state.bakery.currency}${l.total.toFixed(2)}</div>` : ''}
+          ${l.total ? `<div style="font-weight:700;color:var(--brown);">${state.shop.currency}${l.total.toFixed(2)}</div>` : ''}
           <div class="log-time">${formatDateFull(l.date)}</div>
         </div>
       </div>
@@ -933,39 +933,39 @@ function renderSettings(c){
   c.innerHTML = `
   <div class="fade-in">
     <div class="card">
-      <h3 style="margin-bottom:14px;">🏪 Bakery Profile</h3>
+      <h3 style="margin-bottom:14px;">🏪 shop Profile</h3>
       
       <div class="form-group" style="text-align:center;">
-        <label class="form-label">Bakery Logo</label>
+        <label class="form-label">shop Logo</label>
         <div class="logo-upload" onclick="document.getElementById('logoFile').click()">
-          ${state.bakery.logo ? `<img src="${state.bakery.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">🧁</div>`}
+          ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">🧁</div>`}
           <div style="font-size:13px;color:var(--text-muted);">Tap to upload logo</div>
           <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Appears on bills & receipt</div>
         </div>
         <input type="file" id="logoFile" accept="image/*" style="display:none;" onchange="uploadLogo(this)">
-        ${state.bakery.logo ? `<button class="btn-sm btn-secondary" style="margin-top:8px;" onclick="state.bakery.logo=null;saveState();renderSection('settings')">✕ Remove Logo</button>` : ''}
+        ${state.shop.logo ? `<button class="btn-sm btn-secondary" style="margin-top:8px;" onclick="state.shop.logo=null;saveState();renderSection('settings')">✕ Remove Logo</button>` : ''}
       </div>
 
       <div class="form-group">
-        <label class="form-label">Bakery Name *</label>
-        <input type="text" id="setName" value="${state.bakery.name}" placeholder="Your Bakery Name">
+        <label class="form-label">shop Name *</label>
+        <input type="text" id="setName" value="${state.shop.name}" placeholder="Your shop Name">
       </div>
       <div class="form-group">
         <label class="form-label">Tagline</label>
-        <input type="text" id="setTagline" value="${state.bakery.tagline}" placeholder="Fresh & Delicious">
+        <input type="text" id="setTagline" value="${state.shop.tagline}" placeholder="Fresh & Delicious">
       </div>
       <div class="form-group">
         <label class="form-label">Address</label>
-        <textarea id="setAddress" rows="2">${state.bakery.address}</textarea>
+        <textarea id="setAddress" rows="2">${state.shop.address}</textarea>
       </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Phone</label>
-          <input type="tel" id="setPhone" value="${state.bakery.phone}" placeholder="9876543210">
+          <input type="tel" id="setPhone" value="${state.shop.phone}" placeholder="9876543210">
         </div>
         <div class="form-group">
           <label class="form-label">GST Number</label>
-          <input type="text" id="setGst" value="${state.bakery.gst}" placeholder="Optional">
+          <input type="text" id="setGst" value="${state.shop.gst}" placeholder="Optional">
         </div>
       </div>
     </div>
@@ -976,17 +976,17 @@ function renderSettings(c){
         <div class="form-group">
           <label class="form-label">Currency Symbol</label>
           <select id="setCurrency">
-            ${['₹','$','€','£','¥','₵'].map(c => `<option ${state.bakery.currency===c?'selected':''}>${c}</option>`).join('')}
+            ${['₹','$','€','£','¥','₵'].map(c => `<option ${state.shop.currency===c?'selected':''}>${c}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">Tax Rate (%)</label>
-          <input type="number" id="setTax" value="${state.bakery.taxRate}" min="0" max="100" step="0.1">
+          <input type="number" id="setTax" value="${state.shop.taxRate}" min="0" max="100" step="0.1">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Low Stock Alert (qty below)</label>
-        <input type="number" id="setLowStock" value="${state.bakery.lowStockAlert}" min="0">
+        <input type="number" id="setLowStock" value="${state.shop.lowStockAlert}" min="0">
       </div>
     </div>
 
@@ -998,7 +998,7 @@ function renderSettings(c){
     </div>
 
     <div style="text-align:center;padding:20px;color:var(--text-light);font-size:12px;">
-      Bakery Inventory Manager v1.0<br>Runs locally on your device
+      Bumblebee
     </div>
   </div>`;
 }
@@ -1008,7 +1008,7 @@ function uploadLogo(input){
   if(!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    state.bakery.logo = e.target.result;
+    state.shop.logo = e.target.result;
     saveState();
     renderSection('settings');
     updateTopbar();
@@ -1017,14 +1017,14 @@ function uploadLogo(input){
 }
 
 function saveSettings(){
-  state.bakery.name = document.getElementById('setName').value.trim() || 'My Bakery';
-  state.bakery.tagline = document.getElementById('setTagline').value.trim();
-  state.bakery.address = document.getElementById('setAddress').value.trim();
-  state.bakery.phone = document.getElementById('setPhone').value.trim();
-  state.bakery.gst = document.getElementById('setGst').value.trim();
-  state.bakery.currency = document.getElementById('setCurrency').value;
-  state.bakery.taxRate = parseFloat(document.getElementById('setTax').value) || 0;
-  state.bakery.lowStockAlert = parseInt(document.getElementById('setLowStock').value) || 5;
+  state.shop.name = document.getElementById('setName').value.trim() || 'My shop';
+  state.shop.tagline = document.getElementById('setTagline').value.trim();
+  state.shop.address = document.getElementById('setAddress').value.trim();
+  state.shop.phone = document.getElementById('setPhone').value.trim();
+  state.shop.gst = document.getElementById('setGst').value.trim();
+  state.shop.currency = document.getElementById('setCurrency').value;
+  state.shop.taxRate = parseFloat(document.getElementById('setTax').value) || 0;
+  state.shop.lowStockAlert = parseInt(document.getElementById('setLowStock').value) || 5;
   saveState();
   updateTopbar();
   toast('✅ Settings saved');
