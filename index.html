@@ -6,33 +6,33 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#7c4a1e">
+<meta name="theme-color" content="#000000">
 <title>Shop Management System</title>
 <link rel="manifest" href="#" />
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{
-  --brown:#0b0300;--brown-dark:#12041f;--brown-light:#0e0802;
-  --cream:#F2E8D8;--cream-dark:#E8DAC2;--warm-white:#FBF5EC;
-  --text:#2A1A0F;--text-muted:#6B543F;--text-light:#86714F;
-  --success:#2F6B3A;--danger:#B23A2E;--warn:#855D13;
-  --border:#E3D2B4;--border-strong:#9C7A46;
-  --radius:14px;--shadow:0 4px 16px rgba(36,24,17,.14),0 1px 4px rgba(36,24,17,.08);
-  --font:-apple-system,'Segoe UI',Roboto,sans-serif;
-
+  /* Black & White Theme overrides */
+  --brown:#000000; --brown-dark:#1a1a1a; --brown-light:#333333;
+  --cream:#ffffff; --cream-dark:#f4f4f4; --warm-white:#ffffff;
+  --text:#000000; --text-muted:#555555; --text-light:#888888;
+  --success:#333333; --danger:#000000; --warn:#666666;
+  --border:#dddddd; --border-strong:#000000;
+  --radius:12px; --shadow:0 4px 16px rgba(0,0,0,.1),0 1px 4px rgba(0,0,0,.05);
+  --font:'Times New Roman', Times, serif;
   }
   body{font-family:var(--font);background:var(--cream);color:var(--text);min-height:100vh;overflow-x:hidden;}
   h1{font-size:22px;font-weight:700;}h2{font-size:18px;font-weight:600;}h3{font-size:16px;font-weight:600;}
   input,select,textarea{font-family:var(--font);font-size:15px;width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--warm-white);color:var(--text);outline:none;transition:border .2s;}
   input:focus,select:focus,textarea:focus{border-color:var(--brown);}
   textarea{resize:vertical;min-height:60px;}
-  button{font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;border:none;border-radius:var(--radius);padding:11px 18px;transition:all .15s;}
-  .btn-primary{background:var(--brown);color:#fff;}
+  button{font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;border:1px solid transparent;border-radius:var(--radius);padding:11px 18px;transition:all .15s;}
+  .btn-primary{background:var(--brown);color:#fff;border-color:var(--brown);}
   .btn-primary:active{background:var(--brown-dark);}
   .btn-secondary{background:transparent;border:1.5px solid var(--brown);color:var(--brown);}
   .btn-secondary:active{background:var(--cream-dark);}
-  .btn-danger{background:var(--danger);color:#fff;}
-  .btn-success{background:var(--success);color:#fff;}
+  .btn-danger{background:var(--danger);color:#fff;border-color:var(--danger);}
+  .btn-success{background:var(--success);color:#fff;border-color:var(--success);}
   .btn-sm{padding:7px 13px;font-size:13px;}
 
   /* Layout */
@@ -52,15 +52,17 @@
   .card{background:#fff;border-radius:var(--radius);border:1px solid var(--border);padding:16px;margin-bottom:12px;box-shadow:var(--shadow);}
   .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
   .badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;}
-  .badge-success{background:#d4edda;color:var(--success);}
-  .badge-danger{background:#fde8e7;color:var(--danger);}
-  .badge-warn{background:#fff3cd;color:var(--warn);}
-  .badge-brown{background:var(--cream-dark);color:var(--brown-dark);}
+  
+  /* B&W adjusted badges */
+  .badge-success{background:#e0e0e0;color:#000;border:1px solid #000;}
+  .badge-danger{background:#000;color:#fff;}
+  .badge-warn{background:#f4f4f4;color:#333;border:1px solid #333;}
+  .badge-brown{background:#f4f4f4;color:#000;border:1px solid #000;}
 
   /* Tabs */
-  .tabs{display:flex;background:var(--cream-dark);border-radius:var(--radius);padding:3px;margin-bottom:16px;}
+  .tabs{display:flex;background:var(--cream-dark);border-radius:var(--radius);padding:3px;margin-bottom:16px;border:1px solid var(--border);}
   .tab{flex:1;padding:8px;border:none;background:transparent;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);color:var(--text-muted);transition:all .2s;}
-  .tab.active{background:#fff;color:var(--brown);box-shadow:0 1px 4px rgba(0,0,0,.1);}
+  .tab.active{background:#fff;color:var(--brown);box-shadow:0 1px 4px rgba(0,0,0,.1);border:1px solid var(--border-strong);}
 
   /* Forms */
   .form-group{margin-bottom:14px;}
@@ -72,7 +74,7 @@
 
   /* Stock items list */
   .stock-item{display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px;}
-  .stock-icon{width:42px;height:42px;border-radius:10px;background:var(--cream-dark);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .stock-icon{width:42px;height:42px;border-radius:10px;background:var(--cream-dark);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;border:1px solid var(--border);}
   .stock-info{flex:1;min-width:0;}
   .stock-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .stock-meta{font-size:12px;color:var(--text-muted);margin-top:2px;}
@@ -83,23 +85,23 @@
   /* Bill */
   .bill-item-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
   .bill-item-row input[type=number]{width:70px;flex-shrink:0;}
-  .bill-summary{background:var(--cream-dark);border-radius:var(--radius);padding:14px;margin-top:12px;}
+  .bill-summary{background:var(--cream-dark);border-radius:var(--radius);padding:14px;margin-top:12px;border:1px solid var(--border);}
   .summary-row{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;}
   .summary-total{font-size:18px;font-weight:700;border-top:1.5px solid var(--border-strong);margin-top:8px;padding-top:8px;}
 
   /* Modal */
-  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
-  .modal{background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
+  .modal{background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;border-top:2px solid var(--black);}
   .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-  .modal-close{font-size:22px;background:var(--cream);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);}
+  .modal-close{font-size:22px;background:var(--cream-dark);border:1px solid var(--border);width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);}
 
   /* Receipt preview */
   .receipt{font-family:'Courier New',monospace;font-size:13px;background:#fff;padding:16px;border-radius:var(--radius);border:1px dashed var(--border-strong);max-width:300px;margin:0 auto;}
   .receipt-center{text-align:center;}
-  .receipt-divider{border-top:1px dashed #999;margin:6px 0;}
+  .receipt-divider{border-top:1px dashed #000;margin:6px 0;}
   .receipt-row{display:flex;justify-content:space-between;font-size:12px;line-height:1.6;}
   .receipt-logo{width:60px;height:60px;object-fit:cover;border-radius:8px;margin:0 auto 8px;display:block;}
-  .receipt-logo-placeholder{width:60px;height:60px;background:var(--cream-dark);border-radius:8px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:28px;}
+  .receipt-logo-placeholder{width:60px;height:60px;background:var(--cream-dark);border:1px solid #000;border-radius:8px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:28px;}
 
   /* Search */
   .search-box{position:relative;margin-bottom:12px;}
@@ -112,19 +114,16 @@
   .stat-value{font-size:24px;font-weight:700;color:var(--brown);}
   .stat-label{font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:600;}
 
-  /* Low stock alert */
+  /* Low stock alert - adjusted for B&W */
   .alert{border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;font-size:13px;font-weight:600;}
-  .alert-warn{background:#fff3cd;color:var(--warn);border:1px solid #ffd700;}
-  .alert-danger{background:#fde8e7;color:var(--danger);border:1px solid #f5c6cb;}
+  .alert-warn{background:#f4f4f4;color:#000;border:1px solid #000;}
+  .alert-danger{background:#000;color:#fff;border:1px solid #000;}
 
   /* Log entries */
-  .log-entry{border-left:3px solid var(--border-strong);padding:8px 12px;margin-bottom:8px;background:#fff;border-radius:0 var(--radius) var(--radius) 0;}
-  .log-entry.in{border-color:var(--success);}
-  .log-entry.out{border-color:var(--danger);}
+  .log-entry{border-left:3px solid var(--border-strong);padding:8px 12px;margin-bottom:8px;background:#fff;border-radius:0 var(--radius) var(--radius) 0;border:1px solid var(--border);border-left-width:3px;}
+  .log-entry.in{border-left-color:#666;}
+  .log-entry.out{border-left-color:#000;}
   .log-time{font-size:11px;color:var(--text-muted);}
-
-  /* Swipe delete hint */
-  .delete-btn{background:var(--danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;}
 
   /* Print styles */
   @media print{
@@ -140,7 +139,7 @@
 
   /* Empty state */
   .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);}
-  .empty-state-icon{font-size:48px;margin-bottom:12px;}
+  .empty-state-icon{font-size:48px;margin-bottom:12px;filter:grayscale(100%);}
   .empty-state p{font-size:14px;}
 
   /* Image upload */
@@ -149,11 +148,11 @@
   .logo-preview{width:80px;height:80px;border-radius:12px;object-fit:cover;margin:0 auto 8px;display:block;}
 
   /* Qty badge on low stock */
-  .low-stock .qty-num{color:var(--danger);}
-  .ok-stock .qty-num{color:var(--success);}
+  .low-stock .qty-num{color:var(--text); text-decoration: underline;}
+  .ok-stock .qty-num{color:var(--text);}
 
   /* FAB */
-  .fab{position:fixed;bottom:72px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--brown);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(124,74,30,.4);z-index:90;transition:transform .15s;}
+  .fab{position:fixed;bottom:72px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--brown);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:90;transition:transform .15s;}
   .fab:active{transform:scale(.95);}
 
   select option{background:#fff;}
@@ -163,7 +162,7 @@
 <div id="app">
   <!-- Top Bar -->
   <div class="topbar">
-    <div class="topbar-logo" id="topbarLogo">bumblebee.jpg</div>
+    <div class="topbar-logo" id="topbarLogo">SMS</div>
     <div class="topbar-title" id="topbarTitle">Shop Management System</div>
     <button onclick="showSection('settings')" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:18px;">⚙</button>
   </div>
@@ -219,6 +218,8 @@ let state = {
   items: [],
   bills: [],
   logs: [],
+  categories: [], // Dynamic Categories
+  units: [], // Dynamic Units
   nextBillNo: 1001
 };
 
@@ -227,10 +228,34 @@ function loadState(){
   try{
     const saved = localStorage.getItem('shop_state');
     if(saved) state = {...state, ...JSON.parse(saved)};
+    
+    // Fallbacks and Migrations
     if(!state.items) state.items = [];
     if(!state.bills) state.bills = [];
     if(!state.logs) state.logs = [];
     if(!state.nextBillNo) state.nextBillNo = 1001;
+    
+    // Initialize default categories if none exist
+    if(!state.categories || state.categories.length === 0) {
+      state.categories = ['Others'];
+    }
+
+    // Initialize default units if none exist
+    if(!state.units || state.units.length === 0) {
+      state.units = [];
+    }
+
+    // Migrate old items: Ensure buyPrice exists, cleanup emojis, backwards compatibility for units
+    state.items.forEach(i => {
+      if (!('buyPrice' in i)) i.buyPrice = 0;
+      if ('emoji' in i) delete i.emoji;
+      
+      // Auto-add unknown units to the dynamic list
+      if (i.unit && !state.units.some(u => u.toLowerCase() === i.unit.toLowerCase())) {
+        state.units.push(i.unit);
+      }
+    });
+
   }catch(e){}
 }
 
@@ -271,7 +296,7 @@ function updateTopbar(){
   if(state.shop.logo){
     logo.innerHTML = `<img src="${state.shop.logo}" alt="logo">`;
   } else {
-    logo.innerHTML = 'bumblebee.jpg';
+    logo.innerHTML = 'SMS';
   }
 }
 
@@ -295,7 +320,7 @@ function renderDashboard(c){
         <div class="stat-label">Total Items</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" style="color:${lowStock>0?'var(--danger)':'var(--success)'};">${lowStock}</div>
+        <div class="stat-value" style="color:${lowStock>0?'var(--text)':'var(--success)'};">${lowStock}</div>
         <div class="stat-label">Low Stock</div>
       </div>
       <div class="stat-card">
@@ -343,7 +368,7 @@ function renderDashboard(c){
       <div class="card-header"><h3>⚠ Low Stock Items</h3></div>
       ${state.items.filter(i => i.qty <= state.shop.lowStockAlert).map(i => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:14px;">${i.emoji||'📦'} ${i.name}</div>
+          <div style="font-size:14px;">📦 ${i.name}</div>
           <span class="badge badge-danger">${i.qty} ${i.unit}</span>
         </div>
       `).join('')}
@@ -385,10 +410,10 @@ function renderAllStock(items){
     ${items.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">📦</div><p>No items found. Add your first item!</p></div>` :
       items.map(item => `
         <div class="stock-item ${item.qty <= state.shop.lowStockAlert ? 'low-stock' : 'ok-stock'}">
-          <div class="stock-icon">${item.emoji||'📦'}</div>
+          <div class="stock-icon">📦</div>
           <div class="stock-info">
             <div class="stock-name">${item.name}</div>
-            <div class="stock-meta">${state.shop.currency}${item.price.toFixed(2)} · ${item.category||'General'}</div>
+            <div class="stock-meta">Sell: ${state.shop.currency}${item.price.toFixed(2)} · ${item.category||'General'}</div>
           </div>
           <div class="stock-qty">
             <div class="qty-num">${item.qty}</div>
@@ -412,7 +437,7 @@ function renderStockInForm(){
         <label class="form-label">Select Item</label>
         <select id="siItem">
           <option value="">Choose item...</option>
-          ${state.items.map(i => `<option value="${i.id}">${i.emoji||'📦'} ${i.name} (${i.qty} ${i.unit})</option>`).join('')}
+          ${state.items.map(i => `<option value="${i.id}">📦 ${i.name} (${i.qty} ${i.unit})</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
@@ -442,7 +467,7 @@ function renderStockOutForm(){
         <label class="form-label">Select Item</label>
         <select id="soItem">
           <option value="">Choose item...</option>
-          ${state.items.map(i => `<option value="${i.id}">${i.emoji||'📦'} ${i.name} (${i.qty} ${i.unit})</option>`).join('')}
+          ${state.items.map(i => `<option value="${i.id}">📦 ${i.name} (${i.qty} ${i.unit})</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
@@ -497,43 +522,146 @@ function doStockOut(){
   renderSection('stock');
 }
 
-// ─── Add/Edit Item Modal ──────────────────────────────────────────────────────
-// const EMOJIS = ['🥐','🥖','🍞','bumblebee.jpg','🎂','🍰','🍩','🍪','🧇','🥞','🍫','🥛','☕','🧃','🍓','🍋','🥚','🧈','🍯','🌾','🧂','🫙','🥤','📦'];
-// const CATS = ['Breads','Cakes','Pastries','Beverages','Ingredients','Cookies','Others'];
-const UNITS = ['pcs','kg','g','l','ml','dozen','box','pack','bag'];
+// ─── Dynamic Dropdown Handlers ────────────────────────────────────────────────
+function getCategoryOptions(selectedCat) {
+  let html = state.categories.map(c => `<option ${c===selectedCat ? 'selected' : ''}>${c}</option>`).join('');
+  html += `<option value="__NEW__">+ Add New Category</option>`;
+  return html;
+}
 
+function handleCatChange(sel) {
+  if (sel.value === '__NEW__') {
+    let newCat = prompt("Enter new category name:");
+    if (newCat && newCat.trim() !== '') {
+      newCat = newCat.trim();
+      if (!state.categories.includes(newCat)) {
+        state.categories.push(newCat);
+        saveState();
+      }
+      sel.innerHTML = getCategoryOptions(newCat);
+      sel.value = newCat;
+    } else {
+      sel.value = sel.dataset.prev || state.categories[0];
+    }
+  } else {
+    sel.dataset.prev = sel.value;
+  }
+}
+
+function getUnitOptions(selectedUnit) {
+  let html = state.units.map(u => `<option ${u===selectedUnit ? 'selected' : ''}>${u}</option>`).join('');
+  html += `<option value="__NEW__">+ Add New Unit</option>`;
+  return html;
+}
+
+// function handleUnitChange(sel) {
+//   if (sel.value === '__NEW__') {
+//     // Create inline mini-modal for adding a new unit
+//     const overlay = document.createElement('div');
+//     overlay.style = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;";
+    
+//     overlay.innerHTML = `
+//       <div class="card fade-in" style="width:100%;max-width:320px;margin:0;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.5);">
+//         <h3 style="margin-bottom:16px;text-align:center;">Add New Unit</h3>
+//         <div class="form-group">
+//           <label class="form-label">Unit Name</label>
+//           <input type="text" id="newUnitInput" placeholder="Unit name" maxlength="20">
+//         </div>
+//         <div style="display:flex;gap:10px;margin-top:20px;">
+//           <button class="btn-primary" style="flex:1;" id="saveUnitBtn">Save</button>
+//           <button class="btn-secondary" style="flex:1;" id="cancelUnitBtn">Cancel</button>
+//         </div>
+//       </div>
+//     `;
+    
+    document.body.appendChild(overlay);
+    
+    const input = document.getElementById('newUnitInput');
+    input.focus();
+
+    const closeOverlay = () => document.body.removeChild(overlay);
+
+    document.getElementById('cancelUnitBtn').onclick = () => {
+      sel.value = sel.dataset.prev || state.units[0];
+      closeOverlay();
+    };
+
+    document.getElementById('saveUnitBtn').onclick = () => {
+      let newUnit = input.value.trim();
+      
+      if (newUnit === '') {
+        alert('Unit name cannot be empty.');
+        return;
+      }
+      if (newUnit.length > 20) {
+        alert('Unit name cannot exceed 20 characters.');
+        return;
+      }
+      
+      const exists = state.units.find(u => u.toLowerCase() === newUnit.toLowerCase());
+      if (exists) {
+        alert('This unit already exists.');
+        sel.innerHTML = getUnitOptions(exists);
+        sel.value = exists;
+        sel.dataset.prev = exists;
+        closeOverlay();
+        return;
+      }
+      
+      state.units.push(newUnit);
+      saveState();
+      
+      sel.innerHTML = getUnitOptions(newUnit);
+      sel.value = newUnit;
+      sel.dataset.prev = newUnit;
+      
+      closeOverlay();
+    };
+
+    // Support Enter key submission
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') document.getElementById('saveUnitBtn').click();
+    };
+    
+  } else {
+    sel.dataset.prev = sel.value;
+  }
+}
+
+// ─── Add/Edit Item Modal ──────────────────────────────────────────────────────
 function openAddItem(){
   showModal('Add New Item', `
     <div class="form-group">
-      <label class="form-label">Icon</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;" id="emojiPicker">
-        ${EMOJIS.map(e => `<button onclick="selectEmoji('${e}')" style="font-size:22px;background:transparent;border:2px solid transparent;border-radius:8px;padding:4px;cursor:pointer;" data-e="${e}">${e}</button>`).join('')}
-      </div>
-      <input type="hidden" id="itemEmoji" value="📦">
-    </div>
-    <div class="form-group">
       <label class="form-label">Item Name *</label>
-      <input type="text" id="itemName" placeholder="e.g. Chocolate Croissant">
+      <input type="text" id="itemName" placeholder="Item name">
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Category</label>
-        <select id="itemCat">${CATS.map(c=>`<option>${c}</option>`).join('')}</select>
+        <select id="itemCat" onfocus="this.dataset.prev=this.value" onchange="handleCatChange(this)">
+          ${getCategoryOptions()}
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label">Unit</label>
-        <select id="itemUnit">${UNITS.map(u=>`<option>${u}</option>`).join('')}</select>
+        <select id="itemUnit" onfocus="this.dataset.prev=this.value" onchange="handleUnitChange(this)">
+          ${getUnitOptions()}
+        </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Selling Price (${state.shop.currency})</label>
-        <input type="number" id="itemPrice" placeholder="0.00" min="0" step="0.01">
+        <label class="form-label">Buying Price (${state.shop.currency}) *</label>
+        <input type="number" id="itemBuyPrice" placeholder="0.00" min="0" step="0.01">
       </div>
       <div class="form-group">
-        <label class="form-label">Initial Stock</label>
-        <input type="number" id="itemQty" placeholder="0" min="0" step="0.01">
+        <label class="form-label">Selling Price (${state.shop.currency}) *</label>
+        <input type="number" id="itemPrice" placeholder="0.00" min="0" step="0.01">
       </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Initial Stock</label>
+      <input type="number" id="itemQty" placeholder="0" min="0" step="0.01">
     </div>
     <button class="btn-primary" style="width:100%;" onclick="saveItem(null)">✅ Add Item</button>
   `);
@@ -543,69 +671,90 @@ function openEditItem(id){
   const item = state.items.find(i => i.id === id);
   showModal('Edit Item', `
     <div class="form-group">
-      <label class="form-label">Icon</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
-        ${EMOJIS.map(e => `<button onclick="selectEmoji('${e}')" style="font-size:22px;background:transparent;border:2px solid ${e===item.emoji?'var(--brown)':'transparent'};border-radius:8px;padding:4px;cursor:pointer;" data-e="${e}">${e}</button>`).join('')}
-      </div>
-      <input type="hidden" id="itemEmoji" value="${item.emoji||'📦'}">
-    </div>
-    <div class="form-group">
       <label class="form-label">Item Name *</label>
       <input type="text" id="itemName" value="${item.name}">
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Category</label>
-        <select id="itemCat">${CATS.map(c=>`<option ${c===item.category?'selected':''}>${c}</option>`).join('')}</select>
+        <select id="itemCat" onfocus="this.dataset.prev=this.value" onchange="handleCatChange(this)">
+          ${getCategoryOptions(item.category)}
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label">Unit</label>
-        <select id="itemUnit">${UNITS.map(u=>`<option ${u===item.unit?'selected':''}>${u}</option>`).join('')}</select>
+        <select id="itemUnit" onfocus="this.dataset.prev=this.value" onchange="handleUnitChange(this)">
+          ${getUnitOptions(item.unit)}
+        </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Selling Price (${state.shop.currency})</label>
-        <input type="number" id="itemPrice" value="${item.price}" min="0" step="0.01">
+        <label class="form-label">Buying Price (${state.shop.currency}) *</label>
+        <input type="number" id="itemBuyPrice" value="${item.buyPrice}" min="0" step="0.01">
       </div>
       <div class="form-group">
-        <label class="form-label">Current Stock</label>
-        <input type="number" id="itemQty" value="${item.qty}" min="0" step="0.01">
+        <label class="form-label">Selling Price (${state.shop.currency}) *</label>
+        <input type="number" id="itemPrice" value="${item.price}" min="0" step="0.01">
       </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Current Stock</label>
+      <input type="number" id="itemQty" value="${item.qty}" min="0" step="0.01">
     </div>
     <button class="btn-primary" style="width:100%;" onclick="saveItem('${id}')">💾 Save Changes</button>
   `);
 }
 
-function selectEmoji(e){
-  document.getElementById('itemEmoji').value = e;
-  document.querySelectorAll('[data-e]').forEach(b => {
-    b.style.border = b.dataset.e === e ? '2px solid var(--brown)' : '2px solid transparent';
-  });
-}
-
 function saveItem(id){
   const name = document.getElementById('itemName').value.trim();
-  const price = parseFloat(document.getElementById('itemPrice').value) || 0;
-  const qty = parseFloat(document.getElementById('itemQty').value) || 0;
+  const buyPriceInput = document.getElementById('itemBuyPrice').value;
+  const priceInput = document.getElementById('itemPrice').value;
+  const qtyInput = document.getElementById('itemQty').value;
+
+  const buyPrice = parseFloat(buyPriceInput);
+  const price = parseFloat(priceInput);
+  const qty = parseFloat(qtyInput) || 0;
+
+  // Validation
   if(!name){ alert('Item name is required'); return; }
+  if(buyPriceInput === '' || isNaN(buyPrice) || buyPrice < 0){ alert('Valid Buying Price is required and cannot be negative'); return; }
+  if(priceInput === '' || isNaN(price) || price < 0){ alert('Valid Selling Price is required and cannot be negative'); return; }
+  if(qty < 0){ alert('Stock cannot be negative'); return; }
+  
+  if(buyPrice > price) {
+    if(!confirm('Warning: Buying Price is greater than Selling Price. Do you want to continue?')) {
+      return;
+    }
+  }
+
   if(id){
     const item = state.items.find(i => i.id === id);
     const oldQty = item.qty;
     item.name = name;
-    item.emoji = document.getElementById('itemEmoji').value;
     item.category = document.getElementById('itemCat').value;
     item.unit = document.getElementById('itemUnit').value;
+    item.buyPrice = buyPrice;
     item.price = price;
     item.qty = qty;
+
     if(qty !== oldQty){
       state.logs.push({id:uid(),type:qty>oldQty?'in':'out',itemId:id,itemName:name,qty:Math.abs(qty-oldQty),notes:'Manual adjustment',date:new Date().toISOString()});
     }
   } else {
-    const newItem = {id:uid(),name,emoji:document.getElementById('itemEmoji').value,category:document.getElementById('itemCat').value,unit:document.getElementById('itemUnit').value,price,qty};
+    const newItem = {
+      id: uid(),
+      name,
+      category: document.getElementById('itemCat').value,
+      unit: document.getElementById('itemUnit').value,
+      buyPrice,
+      price,
+      qty
+    };
     state.items.push(newItem);
     if(qty > 0) state.logs.push({id:uid(),type:'in',itemId:newItem.id,itemName:name,qty,notes:'Initial stock',date:new Date().toISOString()});
   }
+  
   saveState();
   closeModal();
   renderSection('stock');
@@ -655,7 +804,7 @@ function renderBill(c){
           billItems.map((bi, idx) => `
             <div class="bill-item-row">
               <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${bi.emoji||'📦'} ${bi.name}</div>
+                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📦 ${bi.name}</div>
                 <div style="font-size:11px;color:var(--text-muted);">${state.shop.currency}${bi.price.toFixed(2)} each</div>
               </div>
               <input type="number" min="0.01" step="0.01" value="${bi.qty}" style="width:65px;text-align:center;" onchange="updateBillQty(${idx},this.value)">
@@ -685,7 +834,7 @@ function addBillItem(){
       <label class="form-label">Select Item</label>
       <select id="billItemSel" onchange="updateBillItemPrice(this.value)">
         <option value="">Choose item...</option>
-        ${state.items.map(i => `<option value="${i.id}" data-price="${i.price}" data-emoji="${i.emoji||'📦'}">${i.emoji||'📦'} ${i.name} — ${state.shop.currency}${i.price.toFixed(2)} (${i.qty} ${i.unit})</option>`).join('')}
+        ${state.items.map(i => `<option value="${i.id}" data-price="${i.price}">📦 ${i.name} — ${state.shop.currency}${i.price.toFixed(2)} (${i.qty} ${i.unit})</option>`).join('')}
       </select>
     </div>
     <div class="form-row">
@@ -719,7 +868,7 @@ function confirmAddBillItem(){
   if(existing >= 0){
     billItems[existing].qty += qty;
   } else {
-    billItems.push({itemId, name:item.name, emoji:item.emoji, unit:item.unit, qty, price});
+    billItems.push({itemId, name:item.name, unit:item.unit, qty, price});
   }
   closeModal();
   renderSection('bill');
@@ -789,7 +938,7 @@ function buildReceipt(bill){
   return `
     <div class="receipt">
       <div class="receipt-center">
-        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">bumblebee.jpg</div>`}
+        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">SMS</div>`}
         <div style="font-weight:700;font-size:15px;">${b.name}</div>
         ${b.tagline ? `<div style="font-size:11px;">${b.tagline}</div>` : ''}
         ${b.address ? `<div style="font-size:10px;">${b.address}</div>` : ''}
@@ -939,7 +1088,7 @@ function renderSettings(c){
       <div class="form-group" style="text-align:center;">
         <label class="form-label">Shop Logo</label>
         <div class="logo-upload" onclick="document.getElementById('logoFile').click()">
-          ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">bumblebee.jpg</div>`}
+          ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:48px;margin-bottom:8px;">SMS</div>`}
           <div style="font-size:13px;color:var(--text-muted);">Tap to upload logo</div>
           <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Appears on bills & receipt</div>
         </div>
@@ -948,7 +1097,7 @@ function renderSettings(c){
       </div>
 
       <div class="form-group">
-        <label class="form-label">shop Name *</label>
+        <label class="form-label">Shop Name *</label>
         <input type="text" id="setName" value="${state.shop.name}" placeholder="Your shop Name">
       </div>
       <div class="form-group">
@@ -1035,7 +1184,14 @@ function saveSettings(){
 function clearAllData(){
   if(!confirm('This will delete all items, bills, and history. Are you sure?')) return;
   if(!confirm('Last chance — really delete everything?')) return;
-  state.items = []; state.bills = []; state.logs = []; state.nextBillNo = 1001;
+  
+  state.items = []; 
+  state.bills = []; 
+  state.logs = []; 
+  state.nextBillNo = 1001; 
+  state.categories = [];
+  state.units = [];
+  
   saveState();
   toast('🗑 All data cleared');
   renderSection('dashboard');
