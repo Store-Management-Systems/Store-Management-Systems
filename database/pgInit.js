@@ -276,6 +276,9 @@ async function initNeonDatabase() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;
+
+            UPDATE shops SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
+            UPDATE settings SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
         `);
 
         // 2. Indexes

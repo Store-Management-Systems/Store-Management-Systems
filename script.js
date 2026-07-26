@@ -7,12 +7,12 @@ let activeShopId = null;
 
 let state = {
   shop: {
-    name: 'My Shop',
+    name: 'STORE MANAGEMENT SYSTEMS',
     tagline: 'Quality & Service',
     address: '',
     phone: '',
     gst: '',
-    logo: null,
+    logo: 'logo.png',
     currency: '₹',
     taxRate: 0,
     lowStockAlert: 5
@@ -203,6 +203,29 @@ async function handleAdminShopSwitch(shopId) {
   toast(`Switched shop to ${targetShop ? targetShop.shop_name : shopId}`);
 }
 
+function updateTopbar() {
+  const logoEl = document.getElementById('topbarLogo');
+  const titleEl = document.getElementById('topbarTitle');
+  const loginLogoEl = document.getElementById('loginLogo');
+  const loginShopNameEl = document.getElementById('loginShopName');
+
+  const logoSrc = (state.shop && state.shop.logo) ? state.shop.logo : 'logo.png';
+  const shopTitle = (state.shop && state.shop.name) ? state.shop.name : 'STORE MANAGEMENT SYSTEMS';
+
+  if (logoEl) {
+    logoEl.innerHTML = `<img src="${logoSrc}" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`;
+  }
+  if (titleEl) {
+    titleEl.textContent = shopTitle;
+  }
+  if (loginLogoEl) {
+    loginLogoEl.innerHTML = `<img src="${logoSrc}" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:20px;">`;
+  }
+  if (loginShopNameEl) {
+    loginShopNameEl.textContent = shopTitle;
+  }
+}
+
 // ─── Load Initial Backend Data ────────────────────────────────────────────────
 async function loadInitialData() {
   try {
@@ -220,7 +243,10 @@ async function loadInitialData() {
     if (peopleRes.success) state.people = peopleRes.data || [];
     if (settingsRes.success && settingsRes.data) {
       state.shop = { ...state.shop, ...settingsRes.data };
+      if (!state.shop.logo) state.shop.logo = 'logo.png';
     }
+
+    updateTopbar();
 
     if (!state.categories.length) state.categories = ['General', 'Others'];
     if (!state.units.length) state.units = ['Pcs', 'Kg', 'Box'];

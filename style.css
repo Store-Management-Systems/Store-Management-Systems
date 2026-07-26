@@ -948,3 +948,69 @@ button:active {
   background-color: #007aff !important;
   color: #ffffff !important;
 }
+
+/* Logo Sizing & Resizing Styles */
+.topbar-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.topbar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.login-logo {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.login-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.logo-upload {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  border: 2px dashed rgba(0, 122, 255, 0.4);
+  margin: 0 auto 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s var(--ease-ios);
+}
+
+.logo-upload:hover {
+  border-color: var(--ios-blue);
+  transform: scale(1.04);
+}
+
+.logo-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
