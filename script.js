@@ -40,6 +40,31 @@ let billSplitPayments = [
 ];
 let billPaidAmount = null;
 
+// ─── 15-Minute Inactivity Session Timeout ─────────────────────────────────────
+let inactivityTimer = null;
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+function resetInactivityTimer() {
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  if (!localStorage.getItem('sms_token')) return;
+
+  inactivityTimer = setTimeout(() => {
+    handleSessionTimeout();
+  }, SESSION_TIMEOUT_MS);
+}
+
+function handleSessionTimeout() {
+  currentUser = null;
+  localStorage.removeItem('sms_token');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  alert('⏱ Session expired due to 15 minutes of inactivity. Please sign in again.');
+}
+
+['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'].forEach(evt => {
+  window.addEventListener(evt, resetInactivityTimer, { passive: true });
+});
+
 // Helper to format numbers safely without crashing on strings/nulls
 function fmtNum(val, decimals = 2) {
   const n = parseFloat(val);
@@ -115,7 +140,11 @@ async function checkAuth() {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
 
-      if (currentUser.role === 'Admin') {
+      resetInactivityTimer();
+
+      if (currentUser.branches && currentUser.branches.length > 1) {
+        loadMultiBranchDropdown();
+      } else if (currentUser.role === 'Admin') {
         loadAdminShops();
       } else {
         document.getElementById('topbarAdminShopSelect').style.display = 'none';
@@ -124,6 +153,10 @@ async function checkAuth() {
       updateTopbar();
       await loadInitialData();
       showSection('dashboard');
+
+      if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
+        openMultiBranchLoginModal();
+      }
     }
   } catch (e) {
     handleUnauthorized();
@@ -190,25 +223,58 @@ async function loadAdminShops() {
       state.shops = res.data;
       const select = document.getElementById('adminShopDropdown');
       select.innerHTML = state.shops.map(s => `
-        <option value="${s.id}" ${s.id === activeShopId ? 'selected' : ''}>${s.shop_name}</option>
+        <option value="${s.id}" ${s.id === activeShopId ? 'selected' : ''}>🏢 ${s.shop_name}</option>
       `).join('');
       document.getElementById('topbarAdminShopSelect').style.display = 'block';
     }
   } catch (e) {}
 }
 
+function loadMultiBranchDropdown() {
+  if (!currentUser || !currentUser.branches) return;
+  state.shops = currentUser.branches;
+  const select = document.getElementById('adminShopDropdown');
+  select.innerHTML = currentUser.branches.map(s => `
+    <option value="${s.id}" ${s.id === activeShopId ? 'selected' : ''}>🏢 ${s.shop_name || s.name}</option>
+  `).join('');
+  document.getElementById('topbarAdminShopSelect').style.display = 'block';
+}
+
+function openMultiBranchLoginModal() {
+  if (!currentUser || !currentUser.branches || currentUser.branches.length <= 1) return;
+  sessionStorage.setItem('sms_branch_selected', 'true');
+
+  const branchesHtml = `
+    <div style="padding:4px;">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">Your account has full management access to <strong>${currentUser.branches.length} branches</strong>. Select a branch to open:</p>
+      <div style="display:grid;grid-template-columns:1fr;gap:10px;max-height:360px;overflow-y:auto;">
+        ${currentUser.branches.map(b => `
+          <div onclick="handleAdminShopSwitch('${b.id}');closeModal();" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border-light);border-radius:12px;background:#fff;cursor:pointer;transition:all 0.2s ease;">
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--text-primary);">${b.shop_name || b.name}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Code: ${b.shop_code} ${b.address ? '· ' + b.address : ''}</div>
+            </div>
+            <button class="btn-sm btn-primary">Select Branch ➔</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  showModal(`🏢 Select Branch to Access (${currentUser.branches.length} Branches)`, branchesHtml);
+}
+
 async function handleAdminShopSwitch(shopId) {
   activeShopId = shopId;
   const targetShop = state.shops.find(s => s.id === shopId);
   if (targetShop) {
-    state.shop.name = targetShop.shop_name;
+    state.shop.name = targetShop.shop_name || targetShop.name;
     state.shop.currency = targetShop.currency || '₹';
     state.shop.taxRate = targetShop.tax_rate || 0;
   }
   updateTopbar();
   await loadInitialData();
   renderSection(currentSection);
-  toast(`Switched shop to ${targetShop ? targetShop.shop_name : shopId}`);
+  toast(`Switched branch to ${targetShop ? (targetShop.shop_name || targetShop.name) : shopId}`);
 }
 
 function updateTopbar() {
@@ -2694,7 +2760,101 @@ function downloadReport(format) {
   toast(`📥 Downloading ${type} ${format.toUpperCase()} Report...`);
 }
 
-// ─── 11. Admin & User Management Modals ───────────────────────────────────────
+// ─── 11. Approval Requests & User Management Modals ─────────────────────────
+async function openApprovalsModal() {
+  try {
+    const res = await apiFetch('/approvals');
+    if (!res.success) throw new Error(res.message || 'Failed to load approvals');
+
+    const approvals = res.data || [];
+    const isSuperAdmin = currentUser && currentUser.role === 'Admin';
+
+    const approvalsHtml = `
+      <div style="max-height:480px;overflow-y:auto;padding:4px;">
+        <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+          Requests submitted by branch owners. If not manually acted upon by Superadmin, the system <strong>automatically approves requests after 8 hours</strong>.
+        </div>
+
+        ${approvals.length === 0 ? '<div class="empty-state" style="padding:24px;"><p>No pending or past approval requests</p></div>' :
+          approvals.map(app => {
+            const autoTime = new Date(app.auto_approve_at);
+            const now = new Date();
+            const diffMs = autoTime - now;
+            let timeStr = 'Auto-approved';
+            if (app.status === 'pending') {
+              if (diffMs > 0) {
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                timeStr = `Auto-approves in ${hours}h ${mins}m`;
+              } else {
+                timeStr = 'Auto-approval due';
+              }
+            }
+
+            return `
+              <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);background:#fff;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                  <div>
+                    <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${app.title}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Requested by: <strong>${app.requester_name || 'Owner'}</strong> · ${formatDateFull(app.created_at)}</div>
+                    <div style="font-size:11px;color:var(--ios-blue);margin-top:2px;font-weight:600;">⏳ ${timeStr}</div>
+                  </div>
+                  <span class="badge ${app.status === 'approved' ? 'badge-paid' : app.status === 'rejected' ? 'badge-cancelled' : 'badge-partial'}">${app.status.toUpperCase()}</span>
+                </div>
+
+                ${app.status === 'pending' && isSuperAdmin ? `
+                  <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--border-light);padding-top:8px;">
+                    <button class="btn-sm btn-primary" onclick="handleApproveRequest('${app.id}')">✅ Approve Now</button>
+                    <button class="btn-sm btn-danger" onclick="handleRejectRequest('${app.id}')">❌ Reject</button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')
+        }
+      </div>
+    `;
+
+    showModal('🛡 Pending Approvals (8h Auto-Approval)', approvalsHtml);
+  } catch (err) {
+    alert(err.message || 'Failed to fetch approval requests');
+  }
+}
+
+async function handleApproveRequest(id) {
+  try {
+    const res = await apiFetch(`/approvals/${id}/approve`, { method: 'POST' });
+    if (res.success) {
+      toast('✅ Approval request executed');
+      openApprovalsModal();
+      loadInitialData();
+    }
+  } catch (e) { alert(e.message); }
+}
+
+async function handleRejectRequest(id) {
+  try {
+    const res = await apiFetch(`/approvals/${id}/reject`, { method: 'POST' });
+    if (res.success) {
+      toast('❌ Request rejected');
+      openApprovalsModal();
+      loadInitialData();
+    }
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteUserSubmit(id, username) {
+  if (!confirm(`Are you sure you want to permanently delete user account '@${username}'?`)) return;
+  try {
+    const res = await apiFetch(`/users/${id}`, { method: 'DELETE' });
+    if (res.success || res.status === 202) {
+      toast(res.message || 'User deleted successfully');
+      openUsersModal();
+    }
+  } catch (e) {
+    alert(e.message || 'Failed to delete user');
+  }
+}
 async function openUsersModal() {
   try {
     const [usersRes, permsRes] = await Promise.all([

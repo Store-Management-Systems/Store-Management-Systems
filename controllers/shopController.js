@@ -10,7 +10,7 @@ const getShops = async (req, res) => {
         if (req.user.role === 'Admin') {
             shops = await db.prepare(`SELECT * FROM shops WHERE status != 'deleted' ORDER BY created_at DESC`).all();
         } else {
-            shops = await db.prepare(`SELECT * FROM shops WHERE id = ? AND status != 'deleted'`).all(req.user.shop_id);
+            shops = await db.prepare(`SELECT * FROM shops WHERE (owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC`).all(req.user.id, req.user.shop_id);
         }
         return success(res, 'Shops retrieved', shops);
     } catch (err) {
@@ -61,16 +61,10 @@ const createShop = async (req, res) => {
             return error(res, 'Shop code already exists', 400);
         }
 
+        const isSuperAdmin = req.user.role === 'Admin';
         const shopId = 'shp_' + uuidv4().substring(0, 8);
-        let ownerId = null;
-
-        if (owner_username) {
-            const existingUser = await db.prepare(`SELECT id FROM users WHERE username = ?`).get(owner_username);
-            if (existingUser) {
-                return error(res, 'Owner username already exists', 400);
-            }
-            ownerId = 'usr_' + uuidv4().substring(0, 8);
-        }
+        const ownerId = isSuperAdmin ? (req.user.id) : req.user.id;
+        const initialStatus = isSuperAdmin ? 'active' : 'pending_approval';
 
         await db.prepare(`
             INSERT INTO shops (
@@ -80,23 +74,27 @@ const createShop = async (req, res) => {
         `).run(
             shopId, shop_name, shop_name, shop_code, ownerId, address || '', phone || '', email || null,
             gst || '', fssai || null, manager || null, opening_date || null, currency,
-            parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5, 'active'
+            parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5, initialStatus
         );
 
         if (owner_username && owner_password) {
-            const hashed = bcrypt.hashSync(owner_password, 10);
-            const ownerPermissions = JSON.stringify([
-                'Dashboard', 'Inventory', 'Billing', 'Reports', 'Customers',
-                'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item',
-                'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users',
-                'Financial Reports', 'Categories', 'Units', 'Purchase Price',
-                'Selling Price', 'History', 'Parties', 'Suppliers', 'Ledgers', 'Payments', 'Purchases'
-            ]);
+            const existingUser = await db.prepare(`SELECT id FROM users WHERE username = ?`).get(owner_username);
+            if (!existingUser) {
+                const newUserId = 'usr_' + uuidv4().substring(0, 8);
+                const hashed = bcrypt.hashSync(owner_password, 10);
+                const ownerPermissions = JSON.stringify([
+                    'Dashboard', 'Inventory', 'Billing', 'Reports', 'Customers',
+                    'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item',
+                    'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users',
+                    'Financial Reports', 'Categories', 'Units', 'Purchase Price',
+                    'Selling Price', 'History', 'Parties', 'Suppliers', 'Ledgers', 'Payments', 'Purchases'
+                ]);
 
-            await db.prepare(`
-                INSERT INTO users (id, name, username, password, password_hash, role, shop_id, permissions, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(ownerId, owner_name || `${shop_name} Owner`, owner_username, hashed, hashed, 'Owner', shopId, ownerPermissions, 'active');
+                await db.prepare(`
+                    INSERT INTO users (id, name, username, password, password_hash, role, shop_id, permissions, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(newUserId, owner_name || `${shop_name} Manager`, owner_username, hashed, hashed, 'Owner', shopId, ownerPermissions, initialStatus);
+            }
         }
 
         await db.prepare(`
@@ -112,6 +110,20 @@ const createShop = async (req, res) => {
         const defaultUnits = ['Pcs', 'Kg', 'Grams', 'Ltr', 'Box', 'Pack'];
         for (let idx = 0; idx < defaultUnits.length; idx++) {
             await db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(`unit_${shopId}_${idx}`, shopId, defaultUnits[idx]);
+        }
+
+        if (!isSuperAdmin) {
+            const appId = 'app_' + uuidv4().substring(0, 8);
+            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+            await db.prepare(`
+                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
+                VALUES (?, ?, ?, ?, 'branch_create', ?, ?, ?, 'pending', ?)
+            `).run(appId, shopId, req.user.id, req.user.name, shopId, `Create Branch: ${shop_name} (${shop_code})`, JSON.stringify({
+                shopId, shopName: shop_name, name: shop_name, shopCode: shop_code, ownerId: req.user.id, address, phone, gst, currency, taxRate: tax_rate, logo
+            }), autoApproveAt);
+
+            await logAudit(shopId, req.user.id, 'Request Branch Creation', `Submitted branch creation for '${shop_name}' for approval`);
+            return success(res, 'Branch creation submitted for Superadmin approval (Auto-approves in 8 hours)', { shop_id: shopId, status: 'pending_approval' }, 202);
         }
 
         await logAudit(shopId, req.user.id, 'Create Shop', `Created new shop branch '${shop_name}' (${shop_code})`);

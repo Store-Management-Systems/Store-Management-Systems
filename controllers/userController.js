@@ -90,12 +90,35 @@ const createUser = async (req, res) => {
             permsArray = ['Dashboard', 'Inventory', 'Billing', 'Reports'];
         }
 
+        const isSuperAdmin = req.user.role === 'Admin';
+        const userStatus = isSuperAdmin ? 'active' : 'pending_approval';
+
         await db.prepare(`
             INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, permissions, status, phone)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            userId, name, username, email || null, hashedPassword, hashedPassword, role, assignedShopId, JSON.stringify(permsArray), 'active', phone || null
+            userId, name, username, email || null, hashedPassword, hashedPassword, role, assignedShopId, JSON.stringify(permsArray), userStatus, phone || null
         );
+
+        if (!isSuperAdmin) {
+            const appId = 'app_' + uuidv4().substring(0, 8);
+            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+            await db.prepare(`
+                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
+                VALUES (?, ?, ?, ?, 'user_create', ?, ?, ?, 'pending', ?)
+            `).run(appId, assignedShopId, req.user.id, req.user.name, userId, `Create Staff User: ${username} (${role})`, JSON.stringify({
+                userId, name, username, email, password_hash: hashedPassword, role, shop_id: assignedShopId, permissions: permsArray, phone
+            }), autoApproveAt);
+
+            await logAudit(assignedShopId, req.user.id, 'Request User Creation', `Submitted user creation for '${username}' for approval`);
+            return success(res, 'User creation submitted for Superadmin approval (Auto-approves in 8 hours)', {
+                id: userId,
+                name,
+                username,
+                role,
+                status: 'pending_approval'
+            }, 202);
+        }
 
         await logAudit(assignedShopId, req.user.id, 'Create User', `Created user '${username}' with role '${role}'`);
 
@@ -122,9 +145,24 @@ const updateUser = async (req, res) => {
             return error(res, 'User not found', 404);
         }
 
+        const isSuperAdmin = req.user.role === 'Admin';
         let permsJson = user.permissions;
         if (permissions !== undefined) {
             permsJson = typeof permissions === 'string' ? permissions : JSON.stringify(permissions);
+        }
+
+        if (!isSuperAdmin) {
+            const appId = 'app_' + uuidv4().substring(0, 8);
+            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+            await db.prepare(`
+                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
+                VALUES (?, ?, ?, ?, 'user_edit', ?, ?, ?, 'pending', ?)
+            `).run(appId, user.shop_id, req.user.id, req.user.name, id, `Edit Staff User: ${user.username}`, JSON.stringify({
+                userId: id, name, email, role, permissions, status, phone
+            }), autoApproveAt);
+
+            await logAudit(user.shop_id, req.user.id, 'Request User Edit', `Submitted edit request for user ${user.username}`);
+            return success(res, 'User update submitted for Superadmin approval (Auto-approves in 8 hours)');
         }
 
         await db.prepare(`
@@ -182,9 +220,24 @@ const deleteUser = async (req, res) => {
             return error(res, 'User not found', 404);
         }
 
-        await db.prepare(`UPDATE users SET status = 'disabled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
-        await logAudit(user.shop_id, req.user.id, 'Delete User', `Disabled user account ${user.username}`);
-        return success(res, 'User account disabled');
+        const isSuperAdmin = req.user.role === 'Admin';
+        if (!isSuperAdmin) {
+            const appId = 'app_' + uuidv4().substring(0, 8);
+            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+            await db.prepare(`
+                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
+                VALUES (?, ?, ?, ?, 'user_delete', ?, ?, ?, 'pending', ?)
+            `).run(appId, user.shop_id, req.user.id, req.user.name, id, `Delete Staff User: ${user.username}`, JSON.stringify({
+                userId: id
+            }), autoApproveAt);
+
+            await logAudit(user.shop_id, req.user.id, 'Request User Deletion', `Submitted deletion request for user ${user.username}`);
+            return success(res, 'User deletion submitted for Superadmin approval (Auto-approves in 8 hours)');
+        }
+
+        await db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
+        await logAudit(user.shop_id, req.user.id, 'Delete User', `Permanently deleted user account ${user.username}`);
+        return success(res, 'User account permanently deleted successfully');
     } catch (err) {
         return error(res, err.message, 500);
     }

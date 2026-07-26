@@ -255,6 +255,21 @@ async function initNeonDatabase() {
                 is_read INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS approvals (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50),
+                requester_id VARCHAR(50) NOT NULL,
+                requester_name VARCHAR(150),
+                type VARCHAR(50) NOT NULL,
+                entity_id VARCHAR(50),
+                title VARCHAR(255) NOT NULL,
+                payload TEXT NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                auto_approve_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP
+            );
         `);
 
         // Safely alter existing tables for schema upgrades
@@ -268,6 +283,7 @@ async function initNeonDatabase() {
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS remarks TEXT;
 
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS fssai VARCHAR(50);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS email VARCHAR(150);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_date DATE;

@@ -122,6 +122,7 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('bills', 'cancelled_at', 'DATETIME');
     addColIfMissing('bills', 'remarks', 'TEXT');
 
+    addColIfMissing('shops', 'owner_id', 'TEXT');
     addColIfMissing('shops', 'fssai', 'TEXT');
     addColIfMissing('shops', 'email', 'TEXT');
     addColIfMissing('shops', 'opening_date', 'DATE');
@@ -130,6 +131,25 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('users', 'photo', 'TEXT');
     addColIfMissing('users', 'date_of_joining', 'DATE');
     addColIfMissing('users', 'salary', 'REAL DEFAULT 0');
+
+    try {
+        sqliteDb.exec(`
+            CREATE TABLE IF NOT EXISTS approvals (
+                id TEXT PRIMARY KEY,
+                shop_id TEXT,
+                requester_id TEXT NOT NULL,
+                requester_name TEXT,
+                type TEXT NOT NULL,
+                entity_id TEXT,
+                title TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                auto_approve_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                processed_at DATETIME
+            );
+        `);
+    } catch (e) {}
 
     sqliteDb.pragma('foreign_keys = ON');
 

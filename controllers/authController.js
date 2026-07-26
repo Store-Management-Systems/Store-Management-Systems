@@ -39,6 +39,13 @@ const login = async (req, res) => {
             permissions = [];
         }
 
+        let ownedShops = [];
+        if (user.role === 'Admin') {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
+        } else {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(user.id, user.shop_id);
+        }
+
         const payload = {
             id: user.id,
             name: user.name,
@@ -52,13 +59,13 @@ const login = async (req, res) => {
         const token = jwt.sign(
             payload,
             process.env.JWT_SECRET || 'secret',
-            { expiresIn: '24h' }
+            { expiresIn: '15m' }
         );
 
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 24 * 60 * 60 * 1000
+            maxAge: 15 * 60 * 1000
         });
 
         await logAudit(user.shop_id, user.id, 'Login', `User ${user.username} logged in successfully`);
@@ -73,6 +80,7 @@ const login = async (req, res) => {
                 role: user.role,
                 shop_id: user.shop_id,
                 permissions,
+                branches: ownedShops,
                 shop: shop ? {
                     id: shop.id,
                     name: shop.shop_name || shop.name,
@@ -100,6 +108,12 @@ const getMe = async (req, res) => {
         }
 
         const shop = await db.prepare('SELECT * FROM shops WHERE id = ?').get(user.shop_id);
+        let ownedShops = [];
+        if (user.role === 'Admin') {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
+        } else {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(user.id, user.shop_id);
+        }
 
         let permissions = [];
         try {
@@ -111,6 +125,7 @@ const getMe = async (req, res) => {
         return success(res, 'User session valid', {
             ...user,
             permissions,
+            branches: ownedShops,
             shop: shop ? {
                 id: shop.id,
                 name: shop.shop_name || shop.name,

@@ -21,6 +21,7 @@ const settingsRoutes = require('./settingsRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
 const adminRoutes = require('./adminRoutes');
+const approvalRoutes = require('./approvalRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/shops', shopRoutes);
@@ -42,5 +43,6 @@ router.use('/settings', settingsRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/admin', adminRoutes);
+router.use('/approvals', approvalRoutes);
 
 module.exports = router;
