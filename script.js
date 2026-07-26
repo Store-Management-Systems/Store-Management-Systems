@@ -1431,15 +1431,15 @@ function buildReceipt(bill) {
       <div class="receipt-divider"></div>
       ${items.map(bi => `
         <div style="margin-bottom:4px;font-size:11px;">
-          <div>${bi.name}</div>
-          <div class="receipt-row"><span></span><span>${bi.qty} x ${b.currency}${bi.price.toFixed(2)} = ${b.currency}${(bi.total || bi.qty*bi.price).toFixed(2)}</span></div>
+          <div>${bi.name || bi.item_name}</div>
+          <div class="receipt-row"><span></span><span>${bi.qty} x ${b.currency}${fmtNum(bi.price, 2)} = ${b.currency}${fmtNum(bi.total || (bi.qty * bi.price), 2)}</span></div>
         </div>
       `).join('')}
       <div class="receipt-divider"></div>
-      <div class="receipt-row"><span>Subtotal</span><span>${b.currency}${(bill.subtotal || 0).toFixed(2)}</span></div>
-      ${(bill.tax || 0) > 0 ? `<div class="receipt-row"><span>Tax</span><span>${b.currency}${bill.tax.toFixed(2)}</span></div>` : ''}
+      <div class="receipt-row"><span>Subtotal</span><span>${b.currency}${fmtNum(bill.subtotal, 2)}</span></div>
+      ${(parseFloat(bill.tax) || 0) > 0 ? `<div class="receipt-row"><span>Tax</span><span>${b.currency}${fmtNum(bill.tax, 2)}</span></div>` : ''}
       <div class="receipt-divider"></div>
-      <div class="receipt-row" style="font-weight:800;font-size:14px;"><span>TOTAL</span><span>${b.currency}${(bill.total || 0).toFixed(2)}</span></div>
+      <div class="receipt-row" style="font-weight:800;font-size:14px;"><span>TOTAL</span><span>${b.currency}${fmtNum(bill.total, 2)}</span></div>
       <div class="receipt-divider"></div>
       <div class="receipt-center" style="font-size:11px;margin-top:6px;">Thank you for your visit!<br>Please come again 🙏</div>
     </div>
