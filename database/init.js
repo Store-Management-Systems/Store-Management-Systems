@@ -122,12 +122,14 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('bills', 'cancelled_at', 'DATETIME');
     addColIfMissing('bills', 'remarks', 'TEXT');
 
+    addColIfMissing('shops', 'organization_id', 'TEXT');
     addColIfMissing('shops', 'owner_id', 'TEXT');
     addColIfMissing('shops', 'fssai', 'TEXT');
     addColIfMissing('shops', 'email', 'TEXT');
     addColIfMissing('shops', 'opening_date', 'DATE');
     addColIfMissing('shops', 'manager', 'TEXT');
 
+    addColIfMissing('users', 'organization_id', 'TEXT');
     addColIfMissing('users', 'photo', 'TEXT');
     addColIfMissing('users', 'date_of_joining', 'DATE');
     addColIfMissing('users', 'salary', 'REAL DEFAULT 0');
@@ -147,6 +149,19 @@ if (connectionString && connectionString.startsWith('postgres')) {
                 auto_approve_at DATETIME NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 processed_at DATETIME
+            );
+
+            CREATE TABLE IF NOT EXISTS organizations (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                owner_id TEXT,
+                owner_name TEXT,
+                email TEXT,
+                phone TEXT,
+                status TEXT DEFAULT 'active',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
     } catch (e) {}

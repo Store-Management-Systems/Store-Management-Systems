@@ -151,6 +151,7 @@ async function checkAuth() {
       }
 
       updateTopbar();
+      updateApprovalBadge();
       await loadInitialData();
       showSection('dashboard');
 
@@ -2651,6 +2652,7 @@ async function renderSettings(c) {
     <div class="card">
       <h3 style="margin-bottom:12px;">🏢 Branch & Enterprise Administration</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${currentUser && currentUser.role === 'Admin' ? `<button class="btn-secondary" style="padding:12px;grid-column:span 2;background:rgba(0,122,255,0.08);color:var(--ios-blue);font-weight:700;" onclick="openOrganizationsModal()">🏢 Manage Organizations & Owners</button>` : ''}
         <button class="btn-secondary" style="padding:12px;" onclick="openBranchManagerModal()">🏢 Manage Branches</button>
         <button class="btn-secondary" style="padding:12px;" onclick="openRoleManagerModal()">🔑 Manage Roles & RBAC</button>
         <button class="btn-secondary" style="padding:12px;" onclick="openStaffManagerModal()">👥 Staff & Users</button>
@@ -2761,61 +2763,98 @@ function downloadReport(format) {
 }
 
 // ─── 11. Approval Requests & User Management Modals ─────────────────────────
-async function openApprovalsModal() {
+let approvalTab = 'pending';
+
+async function updateApprovalBadge() {
+  if (!currentUser || currentUser.role !== 'Admin') return;
+  try {
+    const res = await apiFetch('/approvals');
+    if (res.success && res.data) {
+      const pendingCount = res.data.filter(a => a.status === 'pending').length;
+      const btn = document.getElementById('btnTopApprovals');
+      if (btn) {
+        if (pendingCount > 0) {
+          btn.innerHTML = `🛡 Approvals (${pendingCount} Pending)`;
+          btn.style.background = '#ff9500';
+        } else {
+          btn.innerHTML = `🛡 Approvals`;
+          btn.style.background = 'rgba(255,149,0,0.3)';
+        }
+      }
+    }
+  } catch (e) {}
+}
+
+async function openApprovalsModal(tab = 'pending') {
+  approvalTab = tab;
   try {
     const res = await apiFetch('/approvals');
     if (!res.success) throw new Error(res.message || 'Failed to load approvals');
 
-    const approvals = res.data || [];
+    const allApprovals = res.data || [];
     const isSuperAdmin = currentUser && currentUser.role === 'Admin';
 
+    const pendingList = allApprovals.filter(a => a.status === 'pending');
+    const approvedList = allApprovals.filter(a => a.status === 'approved');
+    const rejectedList = allApprovals.filter(a => a.status === 'rejected');
+
+    const currentList = approvalTab === 'approved' ? approvedList : approvalTab === 'rejected' ? rejectedList : pendingList;
+
     const approvalsHtml = `
-      <div style="max-height:480px;overflow-y:auto;padding:4px;">
-        <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">
-          Requests submitted by branch owners. If not manually acted upon by Superadmin, the system <strong>automatically approves requests after 8 hours</strong>.
+      <div style="padding:4px;">
+        <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border-light);padding-bottom:8px;">
+          <button class="btn-sm ${approvalTab === 'pending' ? 'btn-primary' : 'btn-secondary'}" onclick="openApprovalsModal('pending')">⏳ In Process (${pendingList.length})</button>
+          <button class="btn-sm ${approvalTab === 'approved' ? 'btn-success' : 'btn-secondary'}" onclick="openApprovalsModal('approved')">✅ Accepted (${approvedList.length})</button>
+          <button class="btn-sm ${approvalTab === 'rejected' ? 'btn-danger' : 'btn-secondary'}" onclick="openApprovalsModal('rejected')">❌ Declined (${rejectedList.length})</button>
         </div>
 
-        ${approvals.length === 0 ? '<div class="empty-state" style="padding:24px;"><p>No pending or past approval requests</p></div>' :
-          approvals.map(app => {
-            const autoTime = new Date(app.auto_approve_at);
-            const now = new Date();
-            const diffMs = autoTime - now;
-            let timeStr = 'Auto-approved';
-            if (app.status === 'pending') {
-              if (diffMs > 0) {
-                const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                timeStr = `Auto-approves in ${hours}h ${mins}m`;
-              } else {
-                timeStr = 'Auto-approval due';
+        <div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+          Strict Rule: All requests submitted by Branch Owners appear here for Superadmin review. If not manually acted upon, requests <strong>auto-approve after 8 hours</strong>.
+        </div>
+
+        <div style="max-height:380px;overflow-y:auto;">
+          ${currentList.length === 0 ? `<div class="empty-state" style="padding:24px;"><p>No ${approvalTab === 'pending' ? 'In Process' : approvalTab} requests found</p></div>` :
+            currentList.map(app => {
+              const autoTime = new Date(app.auto_approve_at);
+              const now = new Date();
+              const diffMs = autoTime - now;
+              let timeStr = 'Auto-approved';
+              if (app.status === 'pending') {
+                if (diffMs > 0) {
+                  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                  const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                  timeStr = `Auto-approves in ${hours}h ${mins}m`;
+                } else {
+                  timeStr = 'Auto-approval due';
+                }
               }
-            }
 
-            return `
-              <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);background:#fff;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                  <div>
-                    <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${app.title}</div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Requested by: <strong>${app.requester_name || 'Owner'}</strong> · ${formatDateFull(app.created_at)}</div>
-                    <div style="font-size:11px;color:var(--ios-blue);margin-top:2px;font-weight:600;">⏳ ${timeStr}</div>
+              return `
+                <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);background:#fff;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div>
+                      <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${app.title}</div>
+                      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Requested by: <strong>${app.requester_name || 'Owner'}</strong> · ${formatDateFull(app.created_at)}</div>
+                      <div style="font-size:11px;color:var(--ios-blue);margin-top:2px;font-weight:600;">⏳ ${timeStr}</div>
+                    </div>
+                    <span class="badge ${app.status === 'approved' ? 'badge-paid' : app.status === 'rejected' ? 'badge-cancelled' : 'badge-partial'}">${app.status === 'pending' ? 'IN PROCESS' : app.status.toUpperCase()}</span>
                   </div>
-                  <span class="badge ${app.status === 'approved' ? 'badge-paid' : app.status === 'rejected' ? 'badge-cancelled' : 'badge-partial'}">${app.status.toUpperCase()}</span>
+
+                  ${app.status === 'pending' && isSuperAdmin ? `
+                    <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--border-light);padding-top:8px;">
+                      <button class="btn-sm btn-primary" style="flex:1;" onclick="handleApproveRequest('${app.id}')">✅ Accept (Approve)</button>
+                      <button class="btn-sm btn-danger" style="flex:1;" onclick="handleRejectRequest('${app.id}')">❌ Decline (Reject)</button>
+                    </div>
+                  ` : ''}
                 </div>
-
-                ${app.status === 'pending' && isSuperAdmin ? `
-                  <div style="display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--border-light);padding-top:8px;">
-                    <button class="btn-sm btn-primary" onclick="handleApproveRequest('${app.id}')">✅ Approve Now</button>
-                    <button class="btn-sm btn-danger" onclick="handleRejectRequest('${app.id}')">❌ Reject</button>
-                  </div>
-                ` : ''}
-              </div>
-            `;
-          }).join('')
-        }
+              `;
+            }).join('')
+          }
+        </div>
       </div>
     `;
 
-    showModal('🛡 Pending Approvals (8h Auto-Approval)', approvalsHtml);
+    showModal('🛡 Superadmin Approval Management', approvalsHtml);
   } catch (err) {
     alert(err.message || 'Failed to fetch approval requests');
   }
@@ -2825,8 +2864,9 @@ async function handleApproveRequest(id) {
   try {
     const res = await apiFetch(`/approvals/${id}/approve`, { method: 'POST' });
     if (res.success) {
-      toast('✅ Approval request executed');
-      openApprovalsModal();
+      toast('✅ Approval request accepted and executed');
+      openApprovalsModal('pending');
+      updateApprovalBadge();
       loadInitialData();
     }
   } catch (e) { alert(e.message); }
@@ -2836,11 +2876,121 @@ async function handleRejectRequest(id) {
   try {
     const res = await apiFetch(`/approvals/${id}/reject`, { method: 'POST' });
     if (res.success) {
-      toast('❌ Request rejected');
-      openApprovalsModal();
+      toast('❌ Request declined and rejected');
+      openApprovalsModal('pending');
+      updateApprovalBadge();
       loadInitialData();
     }
   } catch (e) { alert(e.message); }
+}
+
+// ─── Organizations Management Modals ───────────────────────────────────────
+async function openOrganizationsModal() {
+  try {
+    const res = await apiFetch('/organizations');
+    if (!res.success) throw new Error(res.message || 'Failed to load organizations');
+
+    const orgs = res.data || [];
+
+    const orgsHtml = `
+      <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateOrganizationModal()">➕ Create New Organization</button>
+      <div style="max-height:360px;overflow-y:auto;">
+        ${orgs.length === 0 ? '<div class="empty-state" style="padding:20px;"><p>No organizations created yet</p></div>' :
+          orgs.map(o => `
+            <div style="padding:12px;border:1px solid var(--border-light);border-radius:10px;margin-bottom:10px;background:#ffffff;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div style="font-weight:700;font-size:15px;color:var(--text-primary);">${o.name} (${o.code})</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Owner: <strong>${o.owner_name || 'N/A'}</strong> ${o.email ? '· ' + o.email : ''} ${o.phone ? '· 📞 ' + o.phone : ''}</div>
+                </div>
+                <span class="badge badge-success">${o.status.toUpperCase()}</span>
+              </div>
+              <div style="margin-top:8px;font-size:11px;color:var(--text-light);">
+                Owner has full authority to create branches and add users within this Organization.
+              </div>
+            </div>
+          `).join('')
+        }
+      </div>
+    `;
+
+    showModal('🏢 Organizations Management', orgsHtml);
+  } catch (err) {
+    alert(err.message || 'Failed to fetch organizations');
+  }
+}
+
+function openCreateOrganizationModal() {
+  showModal('🏢 Create New Organization', `
+    <div class="form-group">
+      <label class="form-label">Organization Name *</label>
+      <input type="text" id="orgName" placeholder="e.g. Bakers Theory Group">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Organization Code *</label>
+      <input type="text" id="orgCode" placeholder="e.g. BTG-01">
+    </div>
+
+    <div style="background:rgba(0,122,255,0.04);padding:12px;border-radius:10px;margin:12px 0;border:1px solid rgba(0,122,255,0.15);">
+      <div style="font-weight:700;font-size:13px;color:var(--ios-blue);margin-bottom:8px;">👤 Organization Owner Account</div>
+      <div class="form-group">
+        <label class="form-label">Owner Full Name</label>
+        <input type="text" id="orgOwnerName" placeholder="e.g. John Doe">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Owner Username *</label>
+          <input type="text" id="orgOwnerUsername" placeholder="e.g. btg_owner">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Owner Password *</label>
+          <input type="password" id="orgOwnerPassword" placeholder="••••••••">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Owner Email</label>
+          <input type="email" id="orgOwnerEmail" placeholder="owner@btg.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Owner Mobile</label>
+          <input type="tel" id="orgOwnerPhone" placeholder="10 Digit Mobile">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary" style="width:100%;padding:12px;" onclick="submitCreateOrganization()">🏢 Create Organization & Owner</button>
+  `);
+}
+
+async function submitCreateOrganization() {
+  const name = document.getElementById('orgName').value.trim();
+  const code = document.getElementById('orgCode').value.trim();
+  const owner_name = document.getElementById('orgOwnerName').value.trim();
+  const owner_username = document.getElementById('orgOwnerUsername').value.trim();
+  const owner_password = document.getElementById('orgOwnerPassword').value;
+  const email = document.getElementById('orgOwnerEmail').value.trim();
+  const phone = document.getElementById('orgOwnerPhone').value.trim();
+
+  if (!name || !code || !owner_username || !owner_password) {
+    alert('Please fill in Organization Name, Code, Owner Username, and Owner Password');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/organizations', {
+      method: 'POST',
+      body: JSON.stringify({ name, code, owner_name, owner_username, owner_password, email, phone })
+    });
+
+    if (res.success) {
+      toast('✅ Organization & Owner account created successfully');
+      closeModal();
+      openOrganizationsModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to create organization');
+  }
 }
 
 async function deleteUserSubmit(id, username) {

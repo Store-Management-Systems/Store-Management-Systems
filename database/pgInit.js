@@ -270,6 +270,19 @@ async function initNeonDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 processed_at TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS organizations (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                code VARCHAR(50) UNIQUE NOT NULL,
+                owner_id VARCHAR(50),
+                owner_name VARCHAR(150),
+                email VARCHAR(150),
+                phone VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         `);
 
         // Safely alter existing tables for schema upgrades
@@ -283,6 +296,8 @@ async function initNeonDatabase() {
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS remarks TEXT;
 
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS organization_id VARCHAR(50);
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id VARCHAR(50);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_id VARCHAR(50);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS fssai VARCHAR(50);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS email VARCHAR(150);

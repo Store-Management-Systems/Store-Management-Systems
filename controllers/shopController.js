@@ -122,6 +122,12 @@ const createShop = async (req, res) => {
                 shopId, shopName: shop_name, name: shop_name, shopCode: shop_code, ownerId: req.user.id, address, phone, gst, currency, taxRate: tax_rate, logo
             }), autoApproveAt);
 
+            const notifId = 'notif_' + uuidv4().substring(0, 8);
+            await db.prepare(`
+                INSERT INTO notifications (id, shop_id, title, message, type)
+                VALUES (?, 'shop_default_hq', ?, ?, 'warning')
+            `).run(notifId, `New Branch Approval Request: ${shop_name}`, `Branch Owner '${req.user.name}' requested creation of branch '${shop_name}' (${shop_code})`);
+
             await logAudit(shopId, req.user.id, 'Request Branch Creation', `Submitted branch creation for '${shop_name}' for approval`);
             return success(res, 'Branch creation submitted for Superadmin approval (Auto-approves in 8 hours)', { shop_id: shopId, status: 'pending_approval' }, 202);
         }

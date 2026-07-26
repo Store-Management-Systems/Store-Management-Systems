@@ -110,6 +110,12 @@ const createUser = async (req, res) => {
                 userId, name, username, email, password_hash: hashedPassword, role, shop_id: assignedShopId, permissions: permsArray, phone
             }), autoApproveAt);
 
+            const notifId = 'notif_' + uuidv4().substring(0, 8);
+            await db.prepare(`
+                INSERT INTO notifications (id, shop_id, title, message, type)
+                VALUES (?, 'shop_default_hq', ?, ?, 'warning')
+            `).run(notifId, `New Staff Approval Request: ${username}`, `Owner '${req.user.name}' requested creation of staff user '${username}' (${role})`);
+
             await logAudit(assignedShopId, req.user.id, 'Request User Creation', `Submitted user creation for '${username}' for approval`);
             return success(res, 'User creation submitted for Superadmin approval (Auto-approves in 8 hours)', {
                 id: userId,

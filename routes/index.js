@@ -22,6 +22,7 @@ const notificationRoutes = require('./notificationRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
 const adminRoutes = require('./adminRoutes');
 const approvalRoutes = require('./approvalRoutes');
+const organizationRoutes = require('./organizationRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/shops', shopRoutes);
@@ -44,5 +45,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/admin', adminRoutes);
 router.use('/approvals', approvalRoutes);
+router.use('/organizations', organizationRoutes);
 
 module.exports = router;
