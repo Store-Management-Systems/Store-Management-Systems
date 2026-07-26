@@ -1104,7 +1104,7 @@ async function renderPOSBilling(c) {
     <!-- Search & Filter -->
     <div class="search-box">
       <span class="search-icon">🔍</span>
-      <input type="text" id="billSearchInput" placeholder="Search items by name..." value="${billSearchQuery}" oninput="billSearchQuery=this.value;renderSection('bill')">
+      <input type="text" id="billSearchInput" placeholder="Search items by name..." value="${billSearchQuery}" oninput="billSearchQuery=this.value;filterPOSItemsDOM();">
     </div>
 
     <!-- Items Grid List -->
@@ -1114,7 +1114,7 @@ async function renderPOSBilling(c) {
         <span style="font-size:12px;color:var(--text-muted);">${filteredItems.length} items found</span>
       </div>
 
-      <div style="max-height:320px;overflow-y:auto;padding-right:2px;">
+      <div style="max-height:320px;overflow-y:auto;padding-right:2px;" id="posItemsList">
         ${filteredItems.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No items found in inventory.</div>' :
           filteredItems.map(i => {
             const inCart = billCart.find(c => c.itemId === i.id);
@@ -1167,18 +1167,21 @@ async function renderPOSBilling(c) {
         <!-- Discount (₹) -->
         <div class="summary-row" style="align-items:center;margin:6px 0;">
           <span style="font-weight:600;color:var(--ios-green);">Discount (₹)</span>
-          <input type="number" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
-            oninput="billDiscount=parseFloat(this.value)||0;renderSection('bill')" 
+          <input type="number" id="posDiscountInput" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
+            oninput="billDiscount=parseFloat(this.value)||0;updatePOSCalculationsDOM();" 
             style="width:110px;padding:4px 8px;font-size:13px;text-align:right;border-radius:8px;border:1px solid var(--ios-green);font-weight:700;">
         </div>
 
-        ${discountAmt > 0 ? `<div class="summary-row" style="font-size:12px;color:var(--text-muted);"><span>Taxable Subtotal</span><span>${state.shop.currency}${fmtNum(taxableSubtotal, 2)}</span></div>` : ''}
+        <div class="summary-row" id="posTaxableRow" style="font-size:12px;color:var(--text-muted);display:${discountAmt > 0 ? 'flex' : 'none'};">
+          <span>Taxable Subtotal</span>
+          <span id="posTaxableVal">${state.shop.currency}${fmtNum(taxableSubtotal, 2)}</span>
+        </div>
 
-        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${fmtNum(taxAmt, 2)}</span></div>` : ''}
+        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span id="posTaxVal">${state.shop.currency}${fmtNum(taxAmt, 2)}</span></div>` : ''}
 
         <div class="summary-row summary-total" style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:6px;">
           <span>Grand Total</span>
-          <span style="color:var(--ios-blue);font-size:20px;font-weight:800;">${state.shop.currency}${fmtNum(grandTotal, 2)}</span>
+          <span id="posGrandVal" style="color:var(--ios-blue);font-size:20px;font-weight:800;">${state.shop.currency}${fmtNum(grandTotal, 2)}</span>
         </div>
 
         <!-- Payment Mode Select -->
@@ -1219,13 +1222,13 @@ async function renderPOSBilling(c) {
         <div class="form-row" style="margin-top:10px;">
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Amount Paid (₹)</label>
-            <input type="number" min="0" max="${grandTotal}" step="1" value="${billPaidAmount !== null ? billPaidAmount : grandTotal}" 
-              placeholder="${grandTotal}" oninput="billPaidAmount=this.value!==''?parseFloat(this.value):null;renderSection('bill')" 
+            <input type="number" id="posPaidInput" min="0" max="${grandTotal}" step="1" value="${billPaidAmount !== null ? billPaidAmount : ''}" 
+              placeholder="${fmtNum(grandTotal, 2)}" oninput="billPaidAmount=this.value!==''?parseFloat(this.value):null;updatePOSCalculationsDOM();" 
               style="font-weight:700;color:var(--ios-green);">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Balance Due (₹)</label>
-            <input type="text" readonly value="${state.shop.currency}${fmtNum(dueAmt, 2)}" 
+            <input type="text" id="posDueInput" readonly value="${state.shop.currency}${fmtNum(dueAmt, 2)}" 
               style="font-weight:800;color:${dueAmt > 0 ? 'var(--ios-red)' : 'var(--ios-green)'};background:rgba(0,0,0,0.03);">
           </div>
         </div>
@@ -1234,6 +1237,48 @@ async function renderPOSBilling(c) {
       <button class="btn-primary" style="width:100%;margin-top:14px;padding:14px;font-size:16px;" onclick="generateBillSubmit()">🧾 Complete & Print Bill</button>
     </div>` : ''}
   </div>`;
+}
+
+function updatePOSCalculationsDOM() {
+  const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
+  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  const taxableSubtotal = Math.max(0, subtotal - discountAmt);
+  const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
+  const grandTotal = taxableSubtotal + taxAmt;
+  const actualPaid = (billPaidAmount !== null && billPaidAmount !== undefined && billPaidAmount !== '') ? Math.min(grandTotal, Math.max(0, parseFloat(billPaidAmount))) : grandTotal;
+  const dueAmt = Math.max(0, grandTotal - actualPaid);
+
+  const taxableRow = document.getElementById('posTaxableRow');
+  const taxableVal = document.getElementById('posTaxableVal');
+  const taxVal = document.getElementById('posTaxVal');
+  const grandVal = document.getElementById('posGrandVal');
+  const dueInput = document.getElementById('posDueInput');
+  const paidInput = document.getElementById('posPaidInput');
+
+  if (taxableRow) taxableRow.style.display = discountAmt > 0 ? 'flex' : 'none';
+  if (taxableVal) taxableVal.textContent = state.shop.currency + fmtNum(taxableSubtotal, 2);
+  if (taxVal) taxVal.textContent = state.shop.currency + fmtNum(taxAmt, 2);
+  if (grandVal) grandVal.textContent = state.shop.currency + fmtNum(grandTotal, 2);
+  if (paidInput && (billPaidAmount === null || billPaidAmount === undefined)) {
+    paidInput.placeholder = fmtNum(grandTotal, 2);
+  }
+  if (dueInput) {
+    dueInput.value = state.shop.currency + fmtNum(dueAmt, 2);
+    dueInput.style.color = dueAmt > 0 ? 'var(--ios-red)' : 'var(--ios-green)';
+  }
+}
+
+function filterPOSItemsDOM() {
+  const query = (billSearchQuery || '').toLowerCase();
+  const itemCards = document.querySelectorAll('.bill-item-card');
+  itemCards.forEach(card => {
+    const itemName = (card.querySelector('.bill-item-name')?.textContent || '').toLowerCase();
+    if (itemName.includes(query)) {
+      card.style.display = 'flex';
+    } else {
+      card.style.display = 'none';
+    }
+  });
 }
 
 async function openA4InvoicePrint(id) {

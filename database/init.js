@@ -116,6 +116,7 @@ if (connectionString && connectionString.startsWith('postgres')) {
     };
 
     addColIfMissing('bills', 'payment_modes_split', 'TEXT');
+    addColIfMissing('bills', 'updated_at', 'DATETIME');
     addColIfMissing('bills', 'cancelled_by', 'TEXT');
     addColIfMissing('bills', 'cancellation_reason', 'TEXT');
     addColIfMissing('bills', 'cancelled_at', 'DATETIME');

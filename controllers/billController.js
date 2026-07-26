@@ -372,8 +372,7 @@ const recordPaymentForBill = async (req, res) => {
             UPDATE bills SET
                 paid_amount = ?,
                 due_amount = ?,
-                payment_status = ?,
-                updated_at = CURRENT_TIMESTAMP
+                payment_status = ?
             WHERE id = ? AND shop_id = ?
         `).run(newPaidAmount, newDueAmount, newPaymentStatus, id, activeShop);
 
