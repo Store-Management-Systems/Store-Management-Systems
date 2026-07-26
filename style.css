@@ -906,3 +906,45 @@ button:active {
   font-size: 11px;
   color: #64748b;
 }
+
+/* ─── Topbar Admin Branch Dropdown Glassmorphism Styling ──────────────────── */
+#adminShopDropdown {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 12px !important;
+  padding: 6px 28px 6px 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+  outline: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='white' height='16' viewBox='0 0 24 24' width='16' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s var(--ease-ios);
+}
+
+#adminShopDropdown:hover, #adminShopDropdown:focus {
+  background-color: rgba(255, 255, 255, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+#adminShopDropdown option {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+#adminShopDropdown option:checked,
+#adminShopDropdown option:hover {
+  background-color: #007aff !important;
+  color: #ffffff !important;
+}
