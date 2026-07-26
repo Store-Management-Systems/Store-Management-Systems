@@ -5,14 +5,17 @@ const { success, error } = require('../utils/response');
 const { logAudit } = require('../services/auditService');
 
 const login = async (req, res) => {
-    const { username, password } = req.body;
+    let { username, password } = req.body;
+
+    username = username ? username.trim() : '';
+    password = password ? password.trim() : '';
 
     if (!username || !password) {
         return error(res, 'Username and password are required', 400);
     }
 
     try {
-        const user = await db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(username, username);
+        const user = await db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)').get(username, username);
 
         if (!user) {
             return error(res, 'Invalid credentials', 401);
@@ -126,7 +129,9 @@ const getMe = async (req, res) => {
 };
 
 const changePassword = async (req, res) => {
-    const { oldPassword, newPassword } = req.body;
+    let { oldPassword, newPassword } = req.body;
+    oldPassword = oldPassword ? oldPassword.trim() : '';
+    newPassword = newPassword ? newPassword.trim() : '';
 
     if (!oldPassword || !newPassword) {
         return error(res, 'Old and new passwords are required', 400);
@@ -140,7 +145,7 @@ const changePassword = async (req, res) => {
         }
 
         const hashed = bcrypt.hashSync(newPassword, 10);
-        await db.prepare('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, req.user.id);
+        await db.prepare('UPDATE users SET password = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, hashed, req.user.id);
 
         await logAudit(user.shop_id, user.id, 'Change Password', `User ${user.username} changed password`);
         return success(res, 'Password changed successfully');

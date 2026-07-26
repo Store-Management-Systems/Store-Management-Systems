@@ -189,7 +189,6 @@ async function initNeonDatabase() {
         }
 
         // 4. Seed Super Admin User
-        const adminCheck = await client.query('SELECT id FROM users WHERE username = $1', ['admin']);
         const hashedPassword = bcrypt.hashSync('admin123', 10);
         const allPermissions = JSON.stringify([
             'Dashboard', 'Inventory', 'Billing', 'Reports', 'Customers',
@@ -199,12 +198,18 @@ async function initNeonDatabase() {
             'Selling Price', 'History'
         ]);
 
+        const adminCheck = await client.query('SELECT id FROM users WHERE username = $1', ['admin']);
         if (adminCheck.rowCount === 0) {
             await client.query(`
                 INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, permissions, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             `, ['usr_super_admin', 'Super Admin', 'admin', 'admin@shop.com', hashedPassword, hashedPassword, 'Admin', 'shop_default_hq', allPermissions, 'active']);
             console.log('✅ Seeded Super Admin Account (admin / admin123) in Neon DB');
+        } else {
+            await client.query(`
+                UPDATE users SET password = $1, password_hash = $2, role = 'Admin', status = 'active', permissions = $3 WHERE username = 'admin'
+            `, [hashedPassword, hashedPassword, allPermissions]);
+            console.log('✅ Verified Super Admin Account (admin / admin123) in Neon DB');
         }
 
         // 5. Seed Default Categories & Units
