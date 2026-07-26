@@ -32,6 +32,7 @@ let state = {
 let billCart = []; // Array of { itemId, name, price, qty, stock, unit }
 let billCustomer = { personId: null, name: '', phone: '' };
 let billDiscount = 0;
+let billDiscountType = 'rupees'; // 'rupees' or 'percent'
 let billPaymentMode = 'Cash';
 let billSplitPayments = [
   { mode: 'Cash', amount: 0 },
@@ -1068,7 +1069,12 @@ async function renderPOSBilling(c) {
   });
 
   const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
-  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  let discountAmt = 0;
+  if (billDiscountType === 'percent') {
+    discountAmt = (subtotal * Math.min(100, Math.max(0, parseFloat(billDiscount) || 0))) / 100;
+  } else {
+    discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  }
   const taxableSubtotal = Math.max(0, subtotal - discountAmt);
   const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
   const grandTotal = taxableSubtotal + taxAmt;
@@ -1164,10 +1170,16 @@ async function renderPOSBilling(c) {
       <div class="bill-summary" style="background:rgba(0,122,255,0.03);padding:14px;border-radius:14px;border:1px solid rgba(0,122,255,0.15);">
         <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${fmtNum(subtotal, 2)}</span></div>
 
-        <!-- Discount (₹) -->
+        <!-- Discount Section (% OR Rupees) -->
         <div class="summary-row" style="align-items:center;margin:6px 0;">
-          <span style="font-weight:600;color:var(--ios-green);">Discount (₹)</span>
-          <input type="number" id="posDiscountInput" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-weight:600;color:var(--ios-green);">Discount</span>
+            <div style="display:inline-flex;background:rgba(52,199,89,0.12);border:1px solid var(--ios-green);border-radius:8px;padding:2px;gap:2px;">
+              <button type="button" id="btnDiscountRupees" style="padding:2px 10px;font-size:11px;font-weight:800;border:none;border-radius:6px;cursor:pointer;${billDiscountType === 'rupees' ? 'background:var(--ios-green);color:#fff;' : 'background:transparent;color:var(--ios-green);'}" onclick="setBillDiscountType('rupees')">₹</button>
+              <button type="button" id="btnDiscountPercent" style="padding:2px 10px;font-size:11px;font-weight:800;border:none;border-radius:6px;cursor:pointer;${billDiscountType === 'percent' ? 'background:var(--ios-green);color:#fff;' : 'background:transparent;color:var(--ios-green);'}" onclick="setBillDiscountType('percent')">%</button>
+            </div>
+          </div>
+          <input type="number" id="posDiscountInput" min="0" max="${billDiscountType === 'percent' ? 100 : subtotal}" step="any" value="${billDiscount || ''}" placeholder="${billDiscountType === 'percent' ? '0%' : '₹0'}" 
             oninput="billDiscount=parseFloat(this.value)||0;updatePOSCalculationsDOM();" 
             style="width:110px;padding:4px 8px;font-size:13px;text-align:right;border-radius:8px;border:1px solid var(--ios-green);font-weight:700;">
         </div>
@@ -1239,9 +1251,38 @@ async function renderPOSBilling(c) {
   </div>`;
 }
 
+function setBillDiscountType(type) {
+  billDiscountType = type;
+  const input = document.getElementById('posDiscountInput');
+  if (input) {
+    input.placeholder = type === 'percent' ? '0%' : '₹0';
+  }
+  const btnRupees = document.getElementById('btnDiscountRupees');
+  const btnPercent = document.getElementById('btnDiscountPercent');
+  if (btnRupees && btnPercent) {
+    if (type === 'rupees') {
+      btnRupees.style.background = 'var(--ios-green)';
+      btnRupees.style.color = '#fff';
+      btnPercent.style.background = 'transparent';
+      btnPercent.style.color = 'var(--ios-green)';
+    } else {
+      btnPercent.style.background = 'var(--ios-green)';
+      btnPercent.style.color = '#fff';
+      btnRupees.style.background = 'transparent';
+      btnRupees.style.color = 'var(--ios-green)';
+    }
+  }
+  updatePOSCalculationsDOM();
+}
+
 function updatePOSCalculationsDOM() {
   const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
-  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  let discountAmt = 0;
+  if (billDiscountType === 'percent') {
+    discountAmt = (subtotal * Math.min(100, Math.max(0, parseFloat(billDiscount) || 0))) / 100;
+  } else {
+    discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  }
   const taxableSubtotal = Math.max(0, subtotal - discountAmt);
   const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
   const grandTotal = taxableSubtotal + taxAmt;
@@ -1324,7 +1365,12 @@ function refreshPOSUI() {
   }
 
   const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
-  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  let discountAmt = 0;
+  if (billDiscountType === 'percent') {
+    discountAmt = (subtotal * Math.min(100, Math.max(0, parseFloat(billDiscount) || 0))) / 100;
+  } else {
+    discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  }
   const taxableSubtotal = Math.max(0, subtotal - discountAmt);
   const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
   const grandTotal = taxableSubtotal + taxAmt;
@@ -1353,10 +1399,16 @@ function refreshPOSUI() {
       <div class="bill-summary" style="background:rgba(0,122,255,0.03);padding:14px;border-radius:14px;border:1px solid rgba(0,122,255,0.15);">
         <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${fmtNum(subtotal, 2)}</span></div>
 
-        <!-- Discount (₹) -->
+        <!-- Discount Section (% OR Rupees) -->
         <div class="summary-row" style="align-items:center;margin:6px 0;">
-          <span style="font-weight:600;color:var(--ios-green);">Discount (₹)</span>
-          <input type="number" id="posDiscountInput" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-weight:600;color:var(--ios-green);">Discount</span>
+            <div style="display:inline-flex;background:rgba(52,199,89,0.12);border:1px solid var(--ios-green);border-radius:8px;padding:2px;gap:2px;">
+              <button type="button" id="btnDiscountRupees" style="padding:2px 10px;font-size:11px;font-weight:800;border:none;border-radius:6px;cursor:pointer;${billDiscountType === 'rupees' ? 'background:var(--ios-green);color:#fff;' : 'background:transparent;color:var(--ios-green);'}" onclick="setBillDiscountType('rupees')">₹</button>
+              <button type="button" id="btnDiscountPercent" style="padding:2px 10px;font-size:11px;font-weight:800;border:none;border-radius:6px;cursor:pointer;${billDiscountType === 'percent' ? 'background:var(--ios-green);color:#fff;' : 'background:transparent;color:var(--ios-green);'}" onclick="setBillDiscountType('percent')">%</button>
+            </div>
+          </div>
+          <input type="number" id="posDiscountInput" min="0" max="${billDiscountType === 'percent' ? 100 : subtotal}" step="any" value="${billDiscount || ''}" placeholder="${billDiscountType === 'percent' ? '0%' : '₹0'}" 
             oninput="billDiscount=parseFloat(this.value)||0;updatePOSCalculationsDOM();" 
             style="width:110px;padding:4px 8px;font-size:13px;text-align:right;border-radius:8px;border:1px solid var(--ios-green);font-weight:700;">
         </div>
@@ -1683,7 +1735,12 @@ async function generateBillSubmit() {
   }
 
   const subtotal = billCart.reduce((s, i) => s + i.qty * i.price, 0);
-  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  let discountAmt = 0;
+  if (billDiscountType === 'percent') {
+    discountAmt = (subtotal * Math.min(100, Math.max(0, parseFloat(billDiscount) || 0))) / 100;
+  } else {
+    discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  }
   const taxableSubtotal = Math.max(0, subtotal - discountAmt);
   const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
   const grandTotal = taxableSubtotal + taxAmt;
