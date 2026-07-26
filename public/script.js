@@ -8,7 +8,7 @@ async function handleLogin() {
 
   // 1. Prevent empty submissions
   if (!u || !p) {
-    alert("Please type 'admin' in the Username box and 'admin123' in the Password box.");
+    alert("Please type 'Username' in the Username box and 'Password' in the Password box.");
     return;
   }
 
