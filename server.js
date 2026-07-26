@@ -16,7 +16,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"], // This allows onclick="" to work
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"], // This allows your logo uploads to work
+      connectSrc: ["'self'"]
+    }
+  }
+}));
 app.use(cors());
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
