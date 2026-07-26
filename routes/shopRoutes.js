@@ -1,0 +1,14 @@
+const express = require('express');
+const router = express.Router();
+const shopController = require('../controllers/shopController');
+const { authenticate } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
+
+router.get('/', authenticate, checkPermission('Shops'), shopController.getShops);
+router.get('/:id', authenticate, checkPermission('Shops'), shopController.getShopById);
+router.post('/', authenticate, checkPermission('Shops'), shopController.createShop);
+router.put('/:id', authenticate, checkPermission('Shops'), shopController.updateShop);
+router.patch('/:id/status', authenticate, checkPermission('Shops'), shopController.toggleShopStatus);
+router.delete('/:id', authenticate, checkPermission('Shops'), shopController.deleteShop);
+
+module.exports = router;

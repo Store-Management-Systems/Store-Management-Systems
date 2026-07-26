@@ -1,0 +1,13 @@
+const express = require('express');
+const router = express.Router();
+const itemController = require('../controllers/itemController');
+const { authenticate } = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
+
+router.get('/', authenticate, checkPermission('Inventory'), itemController.getItems);
+router.get('/:id', authenticate, checkPermission('Inventory'), itemController.getItemById);
+router.post('/', authenticate, checkPermission('Create Item'), itemController.createItem);
+router.put('/:id', authenticate, checkPermission('Edit Item'), itemController.updateItem);
+router.delete('/:id', authenticate, checkPermission('Delete Item'), itemController.deleteItem);
+
+module.exports = router;
