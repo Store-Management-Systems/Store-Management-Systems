@@ -3177,9 +3177,39 @@ async function deleteUserSubmit(id, username) {
   }
 }
 
-function openCreateUserModal(permsCsv) {
+async function openCreateUserModal(permsCsv) {
   const perms = permsCsv.split(',');
+  let orgs = [];
+  let shops = [];
+  if (currentUser && currentUser.role === 'Admin') {
+    try {
+      const [orgRes, shopRes] = await Promise.all([
+        apiFetch('/organizations'),
+        apiFetch('/shops')
+      ]);
+      orgs = orgRes.data || [];
+      shops = shopRes.data || [];
+    } catch (e) {}
+  }
+
   showModal('Create User Account', `
+    ${currentUser && currentUser.role === 'Admin' ? `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Organization</label>
+        <select id="uOrgId">
+          <option value="">Headquarters / Main</option>
+          ${orgs.map(o => `<option value="${o.id}">${o.name} (${o.code})</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Assigned Branch</label>
+        <select id="uShopId">
+          ${shops.map(s => `<option value="${s.id}">${s.shop_name}</option>`).join('')}
+        </select>
+      </div>
+    </div>` : ''}
+
     <div class="form-group">
       <label class="form-label">Full Name *</label>
       <input type="text" id="uName" placeholder="John Doe">
@@ -3226,6 +3256,11 @@ async function createUserSubmit() {
   const username = document.getElementById('uUsername').value.trim();
   const password = document.getElementById('uPassword').value;
   const role = document.getElementById('uRole').value;
+  const orgEl = document.getElementById('uOrgId');
+  const shopEl = document.getElementById('uShopId');
+
+  const organization_id = orgEl ? orgEl.value : null;
+  const shop_id = shopEl ? shopEl.value : null;
 
   const checkboxes = document.querySelectorAll('input[name="uPerm"]:checked');
   const permissions = Array.from(checkboxes).map(c => c.value);
@@ -3238,11 +3273,11 @@ async function createUserSubmit() {
   try {
     const res = await apiFetch('/users', {
       method: 'POST',
-      body: JSON.stringify({ name, username, password, role, permissions })
+      body: JSON.stringify({ name, username, password, role, permissions, organization_id, shop_id })
     });
 
     if (res.success) {
-      toast('✅ User created');
+      toast('✅ User created successfully');
       openUsersModal();
     }
   } catch (err) {
@@ -3310,8 +3345,25 @@ async function toggleShopStatusSubmit(id) {
   }
 }
 
-function openCreateShopModal() {
+async function openCreateShopModal() {
+  let orgs = [];
+  if (currentUser && currentUser.role === 'Admin') {
+    try {
+      const res = await apiFetch('/organizations');
+      orgs = res.data || [];
+    } catch (e) {}
+  }
+
   showModal('Add New Shop Branch', `
+    ${currentUser && currentUser.role === 'Admin' ? `
+    <div class="form-group">
+      <label class="form-label">Assign to Organization</label>
+      <select id="sOrgId">
+        <option value="">Headquarters / Independent</option>
+        ${orgs.map(o => `<option value="${o.id}">${o.name} (${o.code})</option>`).join('')}
+      </select>
+    </div>` : ''}
+
     <div class="form-group">
       <label class="form-label">Shop Name *</label>
       <input type="text" id="sName" placeholder="Downtown Bakery">
@@ -3335,7 +3387,7 @@ function openCreateShopModal() {
       <input type="password" id="sOwnerPassword" placeholder="••••••••">
     </div>
 
-    <button class="btn-primary" style="width:100%;" onclick="createShopSubmit()">✅ Create Shop</button>
+    <button class="btn-primary" style="width:100%;" onclick="createShopSubmit()">✅ Create Shop Branch</button>
   `);
 }
 
@@ -3345,6 +3397,8 @@ async function createShopSubmit() {
   const currency = document.getElementById('sCurrency').value.trim() || '₹';
   const owner_username = document.getElementById('sOwnerUsername').value.trim();
   const owner_password = document.getElementById('sOwnerPassword').value;
+  const orgEl = document.getElementById('sOrgId');
+  const organization_id = orgEl ? orgEl.value : null;
 
   if (!shop_name || !shop_code) {
     alert('Shop name and shop code are required');
@@ -3354,16 +3408,16 @@ async function createShopSubmit() {
   try {
     const res = await apiFetch('/shops', {
       method: 'POST',
-      body: JSON.stringify({ shop_name, shop_code, currency, owner_username, owner_password })
+      body: JSON.stringify({ shop_name, shop_code, currency, owner_username, owner_password, organization_id })
     });
 
     if (res.success) {
-      closeModal();
-      toast('✅ Shop created');
+      toast('✅ Shop branch created successfully');
       await loadAdminShops();
+      openShopsModal();
     }
-  } catch (e) {
-    alert(e.message);
+  } catch (err) {
+    alert(err.message || 'Failed to create shop');
   }
 }
 

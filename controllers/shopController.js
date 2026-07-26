@@ -35,6 +35,7 @@ const createShop = async (req, res) => {
     const {
         shop_name,
         shop_code,
+        organization_id,
         address,
         phone,
         email,
@@ -64,15 +65,16 @@ const createShop = async (req, res) => {
         const isSuperAdmin = req.user.role === 'Admin';
         const shopId = 'shp_' + uuidv4().substring(0, 8);
         const ownerId = isSuperAdmin ? (req.user.id) : req.user.id;
+        const targetOrgId = organization_id || req.user.organization_id || null;
         const initialStatus = isSuperAdmin ? 'active' : 'pending_approval';
 
         await db.prepare(`
             INSERT INTO shops (
-                id, name, shop_name, shop_code, owner_id, address, phone, email, gst, fssai, manager, opening_date,
+                id, name, shop_name, shop_code, owner_id, organization_id, address, phone, email, gst, fssai, manager, opening_date,
                 currency, tax_rate, logo, low_stock_alert, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            shopId, shop_name, shop_name, shop_code, ownerId, address || '', phone || '', email || null,
+            shopId, shop_name, shop_name, shop_code, ownerId, targetOrgId, address || '', phone || '', email || null,
             gst || '', fssai || null, manager || null, opening_date || null, currency,
             parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5, initialStatus
         );

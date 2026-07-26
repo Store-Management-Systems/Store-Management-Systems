@@ -65,13 +65,14 @@ const getUserById = async (req, res) => {
 };
 
 const createUser = async (req, res) => {
-    const { name, username, email, password, role = 'Staff', shop_id, permissions, phone } = req.body;
+    const { name, username, email, password, role = 'Staff', shop_id, organization_id, permissions, phone } = req.body;
 
     if (!name || !username || !password) {
         return error(res, 'Name, username, and password are required', 400);
     }
 
     const assignedShopId = req.user.role === 'Admin' ? (shop_id || req.user.shop_id) : req.user.shop_id;
+    const targetOrgId = organization_id || req.user.organization_id || null;
 
     try {
         const existingUser = await db.prepare(`SELECT id FROM users WHERE username = ?`).get(username);
@@ -94,10 +95,10 @@ const createUser = async (req, res) => {
         const userStatus = isSuperAdmin ? 'active' : 'pending_approval';
 
         await db.prepare(`
-            INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, permissions, status, phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, organization_id, permissions, status, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            userId, name, username, email || null, hashedPassword, hashedPassword, role, assignedShopId, JSON.stringify(permsArray), userStatus, phone || null
+            userId, name, username, email || null, hashedPassword, hashedPassword, role, assignedShopId, targetOrgId, JSON.stringify(permsArray), userStatus, phone || null
         );
 
         if (!isSuperAdmin) {
