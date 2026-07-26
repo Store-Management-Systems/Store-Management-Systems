@@ -273,6 +273,7 @@ async function initNeonDatabase() {
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_date DATE;
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS manager VARCHAR(150);
 
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_modes_split TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;

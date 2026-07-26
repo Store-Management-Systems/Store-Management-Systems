@@ -8,6 +8,7 @@ router.post('/', authenticate, checkPermission('Billing'), billController.create
 router.get('/stats', authenticate, billController.getBillStats);
 router.get('/', authenticate, billController.getBills);
 router.get('/:id', authenticate, billController.getBillById);
+router.post('/:id/payments', authenticate, checkPermission('Billing'), billController.recordPaymentForBill);
 router.post('/:id/cancel', authenticate, checkPermission('Billing'), billController.cancelBill);
 
 module.exports = router;

@@ -31,6 +31,13 @@ let state = {
 // Cart State for Billing List View
 let billCart = []; // Array of { itemId, name, price, qty, stock, unit }
 let billCustomer = { personId: null, name: '', phone: '' };
+let billDiscount = 0;
+let billPaymentMode = 'Cash';
+let billSplitPayments = [
+  { mode: 'Cash', amount: 0 },
+  { mode: 'UPI', amount: 0 }
+];
+let billPaidAmount = null;
 
 // Helper to format numbers safely without crashing on strings/nulls
 function fmtNum(val, decimals = 2) {
@@ -345,10 +352,10 @@ async function renderDashboard(c) {
           <button class="btn-sm btn-secondary" onclick="showSection('analytics')">📊 Analytics</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;text-align:center;">
-          <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);cursor:pointer;" onclick="openReceivableDrilldownModal('all')" title="Click to view detailed outstanding invoices drilldown">
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL RECEIVABLE</div>
             <div style="font-size:20px;font-weight:800;color:var(--ios-green);margin-top:2px;">${state.shop.currency}${fmtNum(finW.totalReceivable, 2)}</div>
-            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Customers & B2B Parties</div>
+            <div style="font-size:10px;color:var(--ios-blue);margin-top:2px;font-weight:600;">🔍 Tap to View Breakdown</div>
           </div>
           <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL PAYABLE</div>
@@ -365,16 +372,16 @@ async function renderDashboard(c) {
 
       <!-- People Entity Cards Summary Grid -->
       <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;margin-bottom:16px;">
-        <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
+        <div class="card" style="margin-bottom:0;padding:14px;cursor:pointer;" onclick="openReceivableDrilldownModal('customer')">
           <div style="font-size:12px;font-weight:700;color:var(--ios-green);">📱 RETAIL B2C</div>
           <div style="font-size:18px;font-weight:800;margin-top:4px;">${custW.total} Customers</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${fmtNum(custW.outstanding, 0)}</div>
+          <div style="font-size:11px;color:var(--ios-red);margin-top:2px;font-weight:600;">Due: ${state.shop.currency}${fmtNum(custW.outstanding, 0)} (🔍 Tap)</div>
         </div>
 
-        <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
+        <div class="card" style="margin-bottom:0;padding:14px;cursor:pointer;" onclick="openReceivableDrilldownModal('party')">
           <div style="font-size:12px;font-weight:700;color:var(--ios-blue);">🏢 B2B PARTIES</div>
           <div style="font-size:18px;font-weight:800;margin-top:4px;">${partyW.total} Parties</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${fmtNum(partyW.receivable, 0)}</div>
+          <div style="font-size:11px;color:var(--ios-red);margin-top:2px;font-weight:600;">Due: ${state.shop.currency}${fmtNum(partyW.receivable, 0)} (🔍 Tap)</div>
         </div>
 
         <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
@@ -1032,6 +1039,7 @@ async function renderBillingDashboard(container) {
 
               <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;border-top:1px solid var(--border-light);padding-top:8px;">
                 <button class="btn-sm btn-secondary" onclick="viewBill('${b.id}')">👁 View</button>
+                ${b.status !== 'Cancelled' && b.due_amount > 0 ? `<button class="btn-sm btn-primary" onclick="openPayDueModal('${b.id}')">💳 Clear Due</button>` : ''}
                 <button class="btn-sm btn-accent" onclick="openA4InvoicePrint('${b.id}')">📄 A4 Print</button>
                 <button class="btn-sm btn-success" style="background:#25D366;color:#fff;border:none;" onclick="shareBillWhatsApp('${b.id}')">📱 WhatsApp</button>
                 <button class="btn-sm btn-secondary" onclick="duplicateBill('${b.id}')">📋 Duplicate</button>
@@ -1060,8 +1068,12 @@ async function renderPOSBilling(c) {
   });
 
   const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
-  const tax = subtotal * (state.shop.taxRate || 0) / 100;
-  const total = subtotal + tax;
+  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  const taxableSubtotal = Math.max(0, subtotal - discountAmt);
+  const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
+  const grandTotal = taxableSubtotal + taxAmt;
+  const actualPaid = (billPaidAmount !== null && billPaidAmount !== undefined && billPaidAmount !== '') ? Math.min(grandTotal, Math.max(0, parseFloat(billPaidAmount))) : grandTotal;
+  const dueAmt = Math.max(0, grandTotal - actualPaid);
 
   const b2bEntities = state.people.filter(p => p.category === 'Customer' || p.category === 'Party');
 
@@ -1079,12 +1091,12 @@ async function renderPOSBilling(c) {
 
       <div class="form-row">
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Customer Name</label>
+          <label class="form-label">Customer / Party Name *</label>
           <input type="text" id="billCustName" placeholder="Walk-in Customer" value="${billCustomer.name}" oninput="billCustomer.name=this.value">
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Customer Phone</label>
-          <input type="tel" id="billCustPhone" placeholder="Mobile Number" value="${billCustomer.phone}" oninput="billCustomer.phone=this.value">
+          <label class="form-label">Customer Mobile (10 digits)</label>
+          <input type="tel" id="billCustPhone" placeholder="10 Digit Mobile #" value="${billCustomer.phone}" oninput="billCustomer.phone=this.value">
         </div>
       </div>
     </div>
@@ -1134,7 +1146,7 @@ async function renderPOSBilling(c) {
     <div class="card fade-in" style="margin-top:12px;">
       <div class="card-header">
         <h3>Current Order (${billCart.length} item${billCart.length > 1 ? 's' : ''})</h3>
-        <button class="btn-sm btn-secondary" onclick="billCart=[];renderSection('bill')">Clear All</button>
+        <button class="btn-sm btn-secondary" onclick="billCart=[];billDiscount=0;billPaidAmount=null;renderSection('bill')">Clear Cart</button>
       </div>
 
       <div style="max-height:160px;overflow-y:auto;margin-bottom:10px;">
@@ -1149,10 +1161,74 @@ async function renderPOSBilling(c) {
         `).join('')}
       </div>
 
-      <div class="bill-summary">
+      <div class="bill-summary" style="background:rgba(0,122,255,0.03);padding:14px;border-radius:14px;border:1px solid rgba(0,122,255,0.15);">
         <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${fmtNum(subtotal, 2)}</span></div>
-        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${fmtNum(tax, 2)}</span></div>` : ''}
-        <div class="summary-row summary-total"><span>Total Payable</span><span>${state.shop.currency}${fmtNum(total, 2)}</span></div>
+
+        <!-- Discount (₹) -->
+        <div class="summary-row" style="align-items:center;margin:6px 0;">
+          <span style="font-weight:600;color:var(--ios-green);">Discount (₹)</span>
+          <input type="number" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
+            oninput="billDiscount=parseFloat(this.value)||0;renderSection('bill')" 
+            style="width:110px;padding:4px 8px;font-size:13px;text-align:right;border-radius:8px;border:1px solid var(--ios-green);font-weight:700;">
+        </div>
+
+        ${discountAmt > 0 ? `<div class="summary-row" style="font-size:12px;color:var(--text-muted);"><span>Taxable Subtotal</span><span>${state.shop.currency}${fmtNum(taxableSubtotal, 2)}</span></div>` : ''}
+
+        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${fmtNum(taxAmt, 2)}</span></div>` : ''}
+
+        <div class="summary-row summary-total" style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:6px;">
+          <span>Grand Total</span>
+          <span style="color:var(--ios-blue);font-size:20px;font-weight:800;">${state.shop.currency}${fmtNum(grandTotal, 2)}</span>
+        </div>
+
+        <!-- Payment Mode Select -->
+        <div class="form-group" style="margin-top:12px;margin-bottom:8px;">
+          <label class="form-label" style="font-weight:700;">Payment Mode</label>
+          <select id="billPayModeSelect" onchange="billPaymentMode=this.value;renderSection('bill');" style="padding:10px;border-radius:10px;font-weight:600;">
+            <option value="Cash" ${billPaymentMode === 'Cash' ? 'selected' : ''}>💵 Cash</option>
+            <option value="UPI" ${billPaymentMode === 'UPI' ? 'selected' : ''}>📱 UPI / QR Code</option>
+            <option value="Net Banking" ${billPaymentMode === 'Net Banking' ? 'selected' : ''}>🏦 Net Banking</option>
+            <option value="Debit Card" ${billPaymentMode === 'Debit Card' ? 'selected' : ''}>💳 Debit Card</option>
+            <option value="Credit Card" ${billPaymentMode === 'Credit Card' ? 'selected' : ''}>💳 Credit Card</option>
+            <option value="Cheque" ${billPaymentMode === 'Cheque' ? 'selected' : ''}>📄 Cheque</option>
+            <option value="Split Payment" ${billPaymentMode === 'Split Payment' ? 'selected' : ''}>🔀 Split Payment (Multiple Modes)</option>
+          </select>
+        </div>
+
+        <!-- Split Payments Builder -->
+        ${billPaymentMode === 'Split Payment' ? `
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px dashed var(--ios-blue);margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--ios-blue);margin-bottom:8px;">🔀 Multiple Payment Modes Breakdown</div>
+            ${billSplitPayments.map((sp, idx) => `
+              <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+                <select style="flex:1;padding:6px;font-size:12px;border-radius:8px;" onchange="billSplitPayments[${idx}].mode=this.value;">
+                  ${['Cash', 'UPI', 'Net Banking', 'Debit Card', 'Credit Card', 'Cheque'].map(m => `<option value="${m}" ${sp.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+                </select>
+                <input type="number" placeholder="Amount (₹)" value="${sp.amount || ''}" oninput="billSplitPayments[${idx}].amount=parseFloat(this.value)||0;" style="width:100px;padding:6px;font-size:12px;border-radius:8px;">
+                <button class="btn-sm btn-danger" onclick="billSplitPayments.splice(${idx},1);renderSection('bill')">✕</button>
+              </div>
+            `).join('')}
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+              <button class="btn-sm btn-secondary" onclick="billSplitPayments.push({mode:'UPI',amount:0});renderSection('bill')">➕ Add Mode</button>
+              <button class="btn-sm btn-accent" onclick="autoFillSplitBalance(${actualPaid})">⚡ Auto-Fill Balance</button>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Paid & Due Row -->
+        <div class="form-row" style="margin-top:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Amount Paid (₹)</label>
+            <input type="number" min="0" max="${grandTotal}" step="1" value="${billPaidAmount !== null ? billPaidAmount : grandTotal}" 
+              placeholder="${grandTotal}" oninput="billPaidAmount=this.value!==''?parseFloat(this.value):null;renderSection('bill')" 
+              style="font-weight:700;color:var(--ios-green);">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Balance Due (₹)</label>
+            <input type="text" readonly value="${state.shop.currency}${fmtNum(dueAmt, 2)}" 
+              style="font-weight:800;color:${dueAmt > 0 ? 'var(--ios-red)' : 'var(--ios-green)'};background:rgba(0,0,0,0.03);">
+          </div>
+        </div>
       </div>
 
       <button class="btn-primary" style="width:100%;margin-top:14px;padding:14px;font-size:16px;" onclick="generateBillSubmit()">🧾 Complete & Print Bill</button>
@@ -1186,7 +1262,7 @@ async function openA4InvoicePrint(id) {
             <h2>TAX INVOICE</h2>
             <p><strong>Invoice No:</strong> #${b.bill_number}</p>
             <p><strong>Date:</strong> ${dateStr} ${timeStr}</p>
-            <p><strong>Payment Mode:</strong> ${b.payment_mode || 'Cash'}</p>
+            ${b.split_modes && b.split_modes.length > 0 ? `<p><strong>Payment Modes:</strong> ${b.split_modes.map(sm => `${sm.mode}: ${s.currency}${fmtNum(sm.amount, 2)}`).join(', ')}</p>` : `<p><strong>Payment Mode:</strong> ${b.payment_mode || 'Cash'}</p>`}
             <p><strong>Cashier:</strong> ${b.cashier_name || 'Staff'}</p>
           </div>
         </div>
@@ -1378,25 +1454,76 @@ function decrementCartItem(itemId) {
   renderSection('bill');
 }
 
+function autoFillSplitBalance(totalPaid) {
+  const currentSum = billSplitPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+  const remaining = Math.max(0, totalPaid - currentSum);
+  if (billSplitPayments.length > 0) {
+    billSplitPayments[billSplitPayments.length - 1].amount = remaining;
+    renderSection('bill');
+  }
+}
+
 async function generateBillSubmit() {
   if (billCart.length === 0) {
     alert('Please add at least one item to the bill');
     return;
   }
 
+  for (const item of billCart) {
+    if (!item.qty || item.qty <= 0) {
+      alert(`Quantity for item '${item.name}' must be greater than zero`);
+      return;
+    }
+  }
+
+  const custName = (billCustomer.name || '').trim() || 'Walk-in Customer';
+  const custPhone = (billCustomer.phone || '').trim().replace(/\D/g, '');
+
+  if (billCustomer.phone && custPhone.length !== 10) {
+    alert('Customer mobile number must be exactly 10 numeric digits');
+    return;
+  }
+
   const subtotal = billCart.reduce((s, i) => s + i.qty * i.price, 0);
-  const tax = subtotal * (state.shop.taxRate || 0) / 100;
-  const total = subtotal + tax;
+  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  const taxableSubtotal = Math.max(0, subtotal - discountAmt);
+  const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
+  const grandTotal = taxableSubtotal + taxAmt;
+
+  if (discountAmt > subtotal) {
+    alert('Discount cannot exceed the subtotal');
+    return;
+  }
+
+  const paidAmount = (billPaidAmount !== null && billPaidAmount !== undefined && billPaidAmount !== '') ? Math.max(0, parseFloat(billPaidAmount)) : grandTotal;
+
+  if (paidAmount > grandTotal) {
+    alert(`Paid amount (₹${paidAmount}) cannot exceed grand total (₹${grandTotal})`);
+    return;
+  }
+
+  let splitPayload = [];
+  if (billPaymentMode === 'Split Payment') {
+    splitPayload = billSplitPayments.filter(sp => parseFloat(sp.amount) > 0);
+    const splitSum = splitPayload.reduce((s, sp) => s + parseFloat(sp.amount), 0);
+    if (Math.abs(splitSum - paidAmount) > 0.01) {
+      alert(`Split payment breakdown total (₹${splitSum}) must equal the Paid Amount (₹${paidAmount})!`);
+      return;
+    }
+  }
 
   const payload = {
     personId: billCustomer.personId || null,
-    customerName: billCustomer.name.trim() || 'Walk-in Customer',
-    customerPhone: billCustomer.phone.trim(),
+    customerName: custName,
+    customerPhone: custPhone,
     items: billCart,
     subtotal,
-    tax,
-    total,
-    paymentMode: 'Cash'
+    discount: discountAmt,
+    tax: taxAmt,
+    total: grandTotal,
+    paidAmount,
+    paymentMode: billPaymentMode,
+    splitPayments: splitPayload
   };
 
   try {
@@ -1411,11 +1538,180 @@ async function generateBillSubmit() {
 
       billCart = [];
       billCustomer = { personId: null, name: '', phone: '' };
+      billDiscount = 0;
+      billPaidAmount = null;
+      billPaymentMode = 'Cash';
 
       showBillReceipt(generatedBill);
+      await loadInitialData();
     }
   } catch (err) {
     alert(err.message || 'Failed to generate bill');
+  }
+}
+
+// Clear / Pay Outstanding Due Modal for Existing Invoices
+async function openPayDueModal(billId) {
+  try {
+    const res = await apiFetch(`/bills/${billId}`);
+    if (!res.success || !res.data) {
+      alert('Bill details not found');
+      return;
+    }
+
+    const bill = res.data;
+    const currentDue = parseFloat(bill.due_amount || 0);
+
+    showModal(`💳 Clear Outstanding Due — Bill #${bill.bill_number}`, `
+      <div class="fade-in">
+        <div style="background:rgba(255,59,48,0.06);padding:14px;border-radius:12px;border:1px solid rgba(255,59,48,0.2);margin-bottom:16px;">
+          <div style="font-size:12px;color:var(--text-muted);">Customer / B2B Party</div>
+          <div style="font-weight:800;font-size:16px;color:#0f172a;">${bill.customer_name || 'Walk-in Customer'}</div>
+          ${bill.customer_phone ? `<div style="font-size:12px;color:var(--text-secondary);">📞 Mobile: ${bill.customer_phone}</div>` : ''}
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;text-align:center;">
+            <div style="background:#fff;padding:8px;border-radius:8px;">
+              <div style="font-size:10px;color:var(--text-muted);">GRAND TOTAL</div>
+              <div style="font-weight:700;">${state.shop.currency}${fmtNum(bill.total, 2)}</div>
+            </div>
+            <div style="background:#fff;padding:8px;border-radius:8px;">
+              <div style="font-size:10px;color:var(--text-muted);">TOTAL PAID</div>
+              <div style="font-weight:700;color:var(--ios-green);">${state.shop.currency}${fmtNum(bill.paid_amount, 2)}</div>
+            </div>
+            <div style="background:#fff;padding:8px;border-radius:8px;">
+              <div style="font-size:10px;color:var(--text-muted);">CURRENT DUE</div>
+              <div style="font-weight:800;color:var(--ios-red);">${state.shop.currency}${fmtNum(currentDue, 2)}</div>
+            </div>
+          </div>
+        </div>
+
+        <form id="payDueForm" onsubmit="handlePayDueSubmit(event, '${bill.id}', ${currentDue})">
+          <div class="form-group">
+            <label class="form-label">Payment Amount (₹) *</label>
+            <div style="display:flex;gap:8px;">
+              <input type="number" id="payDueAmount" min="1" max="${currentDue}" step="0.01" value="${currentDue}" required style="font-size:18px;font-weight:800;color:var(--ios-green);">
+              <button type="button" class="btn-secondary" style="padding:0 12px;white-space:nowrap;font-size:12px;" onclick="document.getElementById('payDueAmount').value=${currentDue}">Full Due</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Payment Method *</label>
+            <select id="payDueMode" style="padding:10px;font-weight:600;">
+              <option value="Cash">💵 Cash</option>
+              <option value="UPI">📱 UPI / QR Code</option>
+              <option value="Net Banking">🏦 Net Banking</option>
+              <option value="Debit Card">💳 Debit Card</option>
+              <option value="Credit Card">💳 Credit Card</option>
+              <option value="Cheque">📄 Cheque</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Transaction Reference # (Optional)</label>
+            <input type="text" id="payDueRef" placeholder="e.g. UTR / Cheque / Txn ID">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Notes (Optional)</label>
+            <textarea id="payDueNotes" rows="2" placeholder="e.g. Settlement for bill #${bill.bill_number}"></textarea>
+          </div>
+
+          <button type="submit" class="btn-primary" style="width:100%;padding:14px;font-size:16px;">💰 Record Payment & Update Invoice</button>
+        </form>
+      </div>
+    `);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function handlePayDueSubmit(event, billId, maxDue) {
+  event.preventDefault();
+  const amt = parseFloat(document.getElementById('payDueAmount').value) || 0;
+  const mode = document.getElementById('payDueMode').value;
+  const ref = document.getElementById('payDueRef').value.trim();
+  const notes = document.getElementById('payDueNotes').value.trim();
+
+  if (amt <= 0 || amt > maxDue) {
+    alert(`Payment amount must be between ₹1 and ₹${maxDue}`);
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/bills/${billId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify({ amount: amt, payment_mode: mode, reference_no: ref, notes })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast(`✅ Payment of ${state.shop.currency}${fmtNum(amt, 2)} recorded!`);
+      await loadInitialData();
+      renderSection(currentSection);
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to record payment');
+  }
+}
+
+// Dashboard Drilldown Modal for Total Receivables
+async function openReceivableDrilldownModal(type = 'all') {
+  try {
+    const res = await apiFetch('/bills');
+    if (!res.success) return;
+
+    let bills = (res.data || []).filter(b => b.status !== 'Cancelled' && parseFloat(b.due_amount || 0) > 0);
+
+    if (type === 'customer') {
+      bills = bills.filter(b => !b.person_id || state.people.some(p => p.id === b.person_id && p.category === 'Customer'));
+    } else if (type === 'party') {
+      bills = bills.filter(b => b.person_id && state.people.some(p => p.id === b.person_id && p.category === 'Party'));
+    } else if (type === 'overdue') {
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      bills = bills.filter(b => new Date(b.created_at || b.date).getTime() < thirtyDaysAgo);
+    }
+
+    const totalDueSum = bills.reduce((sum, b) => sum + parseFloat(b.due_amount || 0), 0);
+    const title = type === 'customer' ? 'Customer Outstanding Receivables' :
+                  type === 'party' ? 'B2B Party Outstanding Receivables' :
+                  type === 'overdue' ? 'Overdue Invoices (>30 Days)' : 'Total Outstanding Receivables';
+
+    showModal(`📈 ${title} (${bills.length})`, `
+      <div class="fade-in">
+        <div style="background:linear-gradient(135deg, rgba(255,59,48,0.1), rgba(255,149,0,0.1));padding:12px;border-radius:12px;border:1px solid rgba(255,59,48,0.2);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);">TOTAL UNPAID RECEIVABLES</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ios-red);">${state.shop.currency}${fmtNum(totalDueSum, 2)}</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--ios-blue);">${bills.length} Outstanding Bills</div>
+        </div>
+
+        <div style="max-height:360px;overflow-y:auto;">
+          ${bills.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No outstanding invoices found! 🎉</div>' :
+            bills.map(b => `
+              <div class="card" style="margin-bottom:8px;padding:10px;border:1px solid var(--border-light);">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                  <div>
+                    <div style="font-weight:800;">#${b.bill_number} · <span style="font-size:13px;color:var(--ios-blue);">${b.customer_name || 'Walk-in'}</span></div>
+                    <div style="font-size:11px;color:var(--text-muted);">📞 ${b.customer_phone || 'N/A'} · ${formatDateFull(b.created_at)}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-weight:800;color:var(--ios-red);">${state.shop.currency}${fmtNum(b.due_amount, 2)} due</div>
+                    <div style="font-size:10px;color:var(--text-muted);">Total: ${state.shop.currency}${fmtNum(b.total, 2)}</div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">
+                  <button class="btn-sm btn-secondary" onclick="viewBill('${b.id}')">👁 Details</button>
+                  <button class="btn-sm btn-primary" onclick="closeModal();openPayDueModal('${b.id}')">💳 Clear Due</button>
+                </div>
+              </div>
+            `).join('')
+          }
+        </div>
+      </div>
+    `);
+  } catch (e) {
+    alert(e.message);
   }
 }
 
@@ -1436,6 +1732,18 @@ function buildReceipt(bill) {
   const dateStr = dt.toLocaleDateString('en-IN');
   const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   const items = bill.items || [];
+  const discountVal = parseFloat(bill.discount) || 0;
+  const paidVal = parseFloat(bill.paid_amount !== undefined ? bill.paid_amount : bill.total) || 0;
+  const dueVal = parseFloat(bill.due_amount) || 0;
+
+  let splitModes = [];
+  try {
+    if (bill.payment_modes_split) {
+      splitModes = JSON.parse(bill.payment_modes_split);
+    } else if (bill.split_payments) {
+      splitModes = bill.split_payments;
+    }
+  } catch (e) {}
 
   return `
     <div class="receipt">
@@ -1463,9 +1771,20 @@ function buildReceipt(bill) {
       `).join('')}
       <div class="receipt-divider"></div>
       <div class="receipt-row"><span>Subtotal</span><span>${b.currency}${fmtNum(bill.subtotal, 2)}</span></div>
-      ${(parseFloat(bill.tax) || 0) > 0 ? `<div class="receipt-row"><span>Tax</span><span>${b.currency}${fmtNum(bill.tax, 2)}</span></div>` : ''}
+      ${discountVal > 0 ? `<div class="receipt-row"><span>Discount (₹)</span><span>-${b.currency}${fmtNum(discountVal, 2)}</span></div>` : ''}
+      ${(parseFloat(bill.tax) || 0) > 0 ? `<div class="receipt-row"><span>Tax (${b.tax_rate || b.taxRate || 0}%)</span><span>${b.currency}${fmtNum(bill.tax, 2)}</span></div>` : ''}
       <div class="receipt-divider"></div>
-      <div class="receipt-row" style="font-weight:800;font-size:14px;"><span>TOTAL</span><span>${b.currency}${fmtNum(bill.total, 2)}</span></div>
+      <div class="receipt-row" style="font-weight:800;font-size:14px;"><span>GRAND TOTAL</span><span>${b.currency}${fmtNum(bill.total, 2)}</span></div>
+      <div class="receipt-divider"></div>
+
+      ${splitModes && splitModes.length > 0 ? `
+        <div style="font-size:10px;font-weight:700;margin-bottom:4px;">Payment Modes (Split):</div>
+        ${splitModes.map(sm => `<div class="receipt-row"><span>· ${sm.mode}:</span><span>${b.currency}${fmtNum(sm.amount, 2)}</span></div>`).join('')}
+      ` : `<div class="receipt-row"><span>Payment Mode:</span><span>${bill.payment_mode || 'Cash'}</span></div>`}
+
+      <div class="receipt-row"><span>Amount Paid:</span><span>${b.currency}${fmtNum(paidVal, 2)}</span></div>
+      ${dueVal > 0 ? `<div class="receipt-row" style="font-weight:700;color:#d9534f;"><span>Balance Due:</span><span>${b.currency}${fmtNum(dueVal, 2)}</span></div>` : ''}
+
       <div class="receipt-divider"></div>
       <div class="receipt-center" style="font-size:11px;margin-top:6px;">Thank you for your visit!<br>Please come again 🙏</div>
     </div>
