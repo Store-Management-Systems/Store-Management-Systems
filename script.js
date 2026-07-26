@@ -447,14 +447,14 @@ async function renderPeopleSection(c, forceTab = null) {
                 📞 ${p.mobile || 'No Mobile'} · ${p.city || p.state || 'Local'} ${p.gstin ? '· GST: ' + p.gstin : ''}
               </div>
               <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-                ${isSupplier ? `Total Restock Purchases: ${state.shop.currency}${(p.total_purchases || 0).toFixed(2)}` : `Total Sales: ${state.shop.currency}${(p.total_sales || 0).toFixed(2)}`}
+                ${isSupplier ? `Total Restock Purchases: ${state.shop.currency}${fmtNum(p.total_purchases, 2)}` : `Total Sales: ${state.shop.currency}${fmtNum(p.total_sales, 2)}`}
               </div>
             </div>
 
             <div class="person-due-container">
               <div class="due-label">${isSupplier ? 'Payable Due' : 'Receivable Due'}</div>
               <div class="due-value ${dueVal > 0 ? (isSupplier ? 'payable' : 'receivable') : 'zero'}">
-                ${state.shop.currency}${Math.abs(dueVal).toFixed(2)}
+                ${state.shop.currency}${fmtNum(Math.abs(dueVal), 2)}
               </div>
               <div style="display:flex;gap:4px;margin-top:6px;justify-content:flex-end;">
                 <button class="btn-sm btn-secondary" onclick="openLedgerModal('${p.id}')">📘 Ledger</button>
@@ -590,7 +590,7 @@ async function openLedgerModal(personId) {
         <div style="text-align:right;">
           <div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;">Net Outstanding Due</div>
           <div style="font-size:20px;font-weight:800;color:${current_due > 0 ? (person.category === 'Supplier' ? 'var(--ios-red)' : 'var(--ios-green)') : 'var(--text-primary)'};">
-            ${state.shop.currency}${Math.abs(current_due).toFixed(2)}
+            ${state.shop.currency}${fmtNum(Math.abs(current_due), 2)}
           </div>
         </div>
       </div>
@@ -618,9 +618,9 @@ async function openLedgerModal(personId) {
                 <tr>
                   <td>${formatDate(e.created_at)}</td>
                   <td><strong>${e.entry_type}</strong><br><span style="font-size:10px;color:var(--text-muted);">${e.notes || ''}</span></td>
-                  <td class="text-debit">${e.debit > 0 ? state.shop.currency + e.debit.toFixed(2) : '-'}</td>
-                  <td class="text-credit">${e.credit > 0 ? state.shop.currency + e.credit.toFixed(2) : '-'}</td>
-                  <td class="text-balance">${state.shop.currency}${e.running_balance.toFixed(2)}</td>
+                  <td class="text-debit">${e.debit > 0 ? state.shop.currency + fmtNum(e.debit, 2) : '-'}</td>
+                  <td class="text-credit">${e.credit > 0 ? state.shop.currency + fmtNum(e.credit, 2) : '-'}</td>
+                  <td class="text-balance">${state.shop.currency}${fmtNum(e.running_balance, 2)}</td>
                 </tr>
               `).join('')
             }
@@ -819,19 +819,19 @@ async function renderAnalytics(c) {
         </div>
         <div class="aging-grid">
           <div class="aging-card">
-            <div class="aging-val" style="color:var(--ios-green);">${state.shop.currency}${(ageingBuckets.bucket0_30 || 0).toFixed(0)}</div>
+            <div class="aging-val" style="color:var(--ios-green);">${state.shop.currency}${fmtNum(ageingBuckets.bucket0_30, 0)}</div>
             <div class="aging-lbl">0 - 30 Days</div>
           </div>
           <div class="aging-card">
-            <div class="aging-val" style="color:var(--ios-blue);">${state.shop.currency}${(ageingBuckets.bucket31_60 || 0).toFixed(0)}</div>
+            <div class="aging-val" style="color:var(--ios-blue);">${state.shop.currency}${fmtNum(ageingBuckets.bucket31_60, 0)}</div>
             <div class="aging-lbl">31 - 60 Days</div>
           </div>
           <div class="aging-card">
-            <div class="aging-val" style="color:var(--ios-purple);">${state.shop.currency}${(ageingBuckets.bucket61_90 || 0).toFixed(0)}</div>
+            <div class="aging-val" style="color:var(--ios-purple);">${state.shop.currency}${fmtNum(ageingBuckets.bucket61_90, 0)}</div>
             <div class="aging-lbl">61 - 90 Days</div>
           </div>
           <div class="aging-card">
-            <div class="aging-val" style="color:var(--ios-red);">${state.shop.currency}${(ageingBuckets.bucket90Plus || 0).toFixed(0)}</div>
+            <div class="aging-val" style="color:var(--ios-red);">${state.shop.currency}${fmtNum(ageingBuckets.bucket90Plus, 0)}</div>
             <div class="aging-lbl">90+ Days Overdue</div>
           </div>
         </div>
@@ -846,7 +846,7 @@ async function renderAnalytics(c) {
                 <div style="font-weight:700;">${tc.name}</div>
                 <div style="font-size:11px;color:var(--text-muted);">${tc.bill_count} Sales Bills</div>
               </div>
-              <div style="font-weight:800;color:var(--ios-green);">${state.shop.currency}${parseFloat(tc.total_revenue || 0).toFixed(2)}</div>
+              <div style="font-weight:800;color:var(--ios-green);">${state.shop.currency}${fmtNum(tc.total_revenue, 2)}</div>
             </div>
           `).join('')
         }
