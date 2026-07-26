@@ -1281,6 +1281,159 @@ function filterPOSItemsDOM() {
   });
 }
 
+function refreshPOSUI() {
+  const container = document.getElementById('billSubTabContent');
+  if (!container || billingSubTab !== 'new') return;
+
+  // 1. Update items list steppers & selected state in-place
+  const itemCards = document.querySelectorAll('.bill-item-card');
+  itemCards.forEach(card => {
+    const plusBtn = card.querySelector('.qty-btn.plus');
+    if (!plusBtn) return;
+    const match = plusBtn.getAttribute('onclick')?.match(/['"]([^'"]+)['"]/);
+    if (!match) return;
+    const itemId = match[1];
+    const inCart = billCart.find(c => c.itemId === itemId);
+    const cartQty = inCart ? inCart.qty : 0;
+
+    const stepper = card.querySelector('.qty-stepper');
+    if (cartQty > 0) {
+      card.classList.add('selected');
+      if (stepper) {
+        stepper.innerHTML = `
+          <button class="qty-btn" onclick="decrementCartItem('${itemId}')"> - </button>
+          <span class="qty-val">${cartQty}</span>
+          <button class="qty-btn plus" onclick="incrementCartItem('${itemId}')"> + </button>
+        `;
+      }
+    } else {
+      card.classList.remove('selected');
+      if (stepper) {
+        stepper.innerHTML = `
+          <button class="qty-btn plus" onclick="incrementCartItem('${itemId}')"> + </button>
+        `;
+      }
+    }
+  });
+
+  // 2. Update or render cart checkout box in-place
+  let cartContainer = document.getElementById('posCartContainer');
+  if (billCart.length === 0) {
+    if (cartContainer) cartContainer.remove();
+    return;
+  }
+
+  const subtotal = billCart.reduce((s, item) => s + item.qty * item.price, 0);
+  const discountAmt = Math.min(subtotal, Math.max(0, parseFloat(billDiscount) || 0));
+  const taxableSubtotal = Math.max(0, subtotal - discountAmt);
+  const taxAmt = taxableSubtotal * (state.shop.taxRate || 0) / 100;
+  const grandTotal = taxableSubtotal + taxAmt;
+  const actualPaid = (billPaidAmount !== null && billPaidAmount !== undefined && billPaidAmount !== '') ? Math.min(grandTotal, Math.max(0, parseFloat(billPaidAmount))) : grandTotal;
+  const dueAmt = Math.max(0, grandTotal - actualPaid);
+
+  const cartHtml = `
+    <div class="card fade-in" style="margin-top:12px;" id="posCartContainer">
+      <div class="card-header">
+        <h3>Current Order (${billCart.length} item${billCart.length > 1 ? 's' : ''})</h3>
+        <button class="btn-sm btn-secondary" onclick="billCart=[];billDiscount=0;billPaidAmount=null;refreshPOSUI()">Clear Cart</button>
+      </div>
+
+      <div style="max-height:160px;overflow-y:auto;margin-bottom:10px;">
+        ${billCart.map(item => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;">
+            <div>
+              <span style="font-weight:600;">${item.name}</span>
+              <span style="font-size:11px;color:var(--text-muted);"> (${item.qty} x ${state.shop.currency}${fmtNum(item.price, 2)})</span>
+            </div>
+            <div style="font-weight:700;">${state.shop.currency}${fmtNum(item.qty * item.price, 2)}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="bill-summary" style="background:rgba(0,122,255,0.03);padding:14px;border-radius:14px;border:1px solid rgba(0,122,255,0.15);">
+        <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${fmtNum(subtotal, 2)}</span></div>
+
+        <!-- Discount (₹) -->
+        <div class="summary-row" style="align-items:center;margin:6px 0;">
+          <span style="font-weight:600;color:var(--ios-green);">Discount (₹)</span>
+          <input type="number" id="posDiscountInput" min="0" max="${subtotal}" step="1" value="${billDiscount || ''}" placeholder="0" 
+            oninput="billDiscount=parseFloat(this.value)||0;updatePOSCalculationsDOM();" 
+            style="width:110px;padding:4px 8px;font-size:13px;text-align:right;border-radius:8px;border:1px solid var(--ios-green);font-weight:700;">
+        </div>
+
+        <div class="summary-row" id="posTaxableRow" style="font-size:12px;color:var(--text-muted);display:${discountAmt > 0 ? 'flex' : 'none'};">
+          <span>Taxable Subtotal</span>
+          <span id="posTaxableVal">${state.shop.currency}${fmtNum(taxableSubtotal, 2)}</span>
+        </div>
+
+        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span id="posTaxVal">${state.shop.currency}${fmtNum(taxAmt, 2)}</span></div>` : ''}
+
+        <div class="summary-row summary-total" style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:6px;">
+          <span>Grand Total</span>
+          <span id="posGrandVal" style="color:var(--ios-blue);font-size:20px;font-weight:800;">${state.shop.currency}${fmtNum(grandTotal, 2)}</span>
+        </div>
+
+        <!-- Payment Mode Select -->
+        <div class="form-group" style="margin-top:12px;margin-bottom:8px;">
+          <label class="form-label" style="font-weight:700;">Payment Mode</label>
+          <select id="billPayModeSelect" onchange="billPaymentMode=this.value;refreshPOSUI();" style="padding:10px;border-radius:10px;font-weight:600;">
+            <option value="Cash" ${billPaymentMode === 'Cash' ? 'selected' : ''}>💵 Cash</option>
+            <option value="UPI" ${billPaymentMode === 'UPI' ? 'selected' : ''}>📱 UPI / QR Code</option>
+            <option value="Net Banking" ${billPaymentMode === 'Net Banking' ? 'selected' : ''}>🏦 Net Banking</option>
+            <option value="Debit Card" ${billPaymentMode === 'Debit Card' ? 'selected' : ''}>💳 Debit Card</option>
+            <option value="Credit Card" ${billPaymentMode === 'Credit Card' ? 'selected' : ''}>💳 Credit Card</option>
+            <option value="Cheque" ${billPaymentMode === 'Cheque' ? 'selected' : ''}>📄 Cheque</option>
+            <option value="Split Payment" ${billPaymentMode === 'Split Payment' ? 'selected' : ''}>🔀 Split Payment (Multiple Modes)</option>
+          </select>
+        </div>
+
+        <!-- Split Payments Builder -->
+        ${billPaymentMode === 'Split Payment' ? `
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px dashed var(--ios-blue);margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--ios-blue);margin-bottom:8px;">🔀 Multiple Payment Modes Breakdown</div>
+            ${billSplitPayments.map((sp, idx) => `
+              <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+                <select style="flex:1;padding:6px;font-size:12px;border-radius:8px;" onchange="billSplitPayments[${idx}].mode=this.value;">
+                  ${['Cash', 'UPI', 'Net Banking', 'Debit Card', 'Credit Card', 'Cheque'].map(m => `<option value="${m}" ${sp.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+                </select>
+                <input type="number" placeholder="Amount (₹)" value="${sp.amount || ''}" oninput="billSplitPayments[${idx}].amount=parseFloat(this.value)||0;" style="width:100px;padding:6px;font-size:12px;border-radius:8px;">
+                <button class="btn-sm btn-danger" onclick="billSplitPayments.splice(${idx},1);refreshPOSUI()">✕</button>
+              </div>
+            `).join('')}
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+              <button class="btn-sm btn-secondary" onclick="billSplitPayments.push({mode:'UPI',amount:0});refreshPOSUI()">➕ Add Mode</button>
+              <button class="btn-sm btn-accent" onclick="autoFillSplitBalance(${actualPaid})">⚡ Auto-Fill Balance</button>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Paid & Due Row -->
+        <div class="form-row" style="margin-top:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Amount Paid (₹)</label>
+            <input type="number" id="posPaidInput" min="0" max="${grandTotal}" step="1" value="${billPaidAmount !== null ? billPaidAmount : ''}" 
+              placeholder="${fmtNum(grandTotal, 2)}" oninput="billPaidAmount=this.value!==''?parseFloat(this.value):null;updatePOSCalculationsDOM();" 
+              style="font-weight:700;color:var(--ios-green);">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Balance Due (₹)</label>
+            <input type="text" id="posDueInput" readonly value="${state.shop.currency}${fmtNum(dueAmt, 2)}" 
+              style="font-weight:800;color:${dueAmt > 0 ? 'var(--ios-red)' : 'var(--ios-green)'};background:rgba(0,0,0,0.03);">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;margin-top:14px;padding:14px;font-size:16px;" onclick="generateBillSubmit()">🧾 Complete & Print Bill</button>
+    </div>
+  `;
+
+  if (cartContainer) {
+    cartContainer.outerHTML = cartHtml;
+  } else {
+    container.insertAdjacentHTML('beforeend', cartHtml);
+  }
+}
+
 async function openA4InvoicePrint(id) {
   try {
     const res = await apiFetch(`/bills/${id}`);
@@ -1484,7 +1637,7 @@ function incrementCartItem(itemId) {
     });
   }
 
-  renderSection('bill');
+  refreshPOSUI();
 }
 
 function decrementCartItem(itemId) {
@@ -1496,7 +1649,7 @@ function decrementCartItem(itemId) {
       billCart.splice(existingIndex, 1);
     }
   }
-  renderSection('bill');
+  refreshPOSUI();
 }
 
 function autoFillSplitBalance(totalPaid) {
@@ -1504,7 +1657,7 @@ function autoFillSplitBalance(totalPaid) {
   const remaining = Math.max(0, totalPaid - currentSum);
   if (billSplitPayments.length > 0) {
     billSplitPayments[billSplitPayments.length - 1].amount = remaining;
-    renderSection('bill');
+    refreshPOSUI();
   }
 }
 
