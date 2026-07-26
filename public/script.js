@@ -1,4 +1,4 @@
-const API_URL = 'https://store-management-systems.onrender.com/api';
+const API_URL = '/api';
 let state = { user: null, shopId: null, shops: [], items: [], cart: {} };
 
 // --- Auth & RBAC ---
