@@ -1,6 +1,7 @@
 {
-  "name": "shop-management-v2",
-  "version": "2.0.0",
+  "name": "shop-management-systems",
+  "version": "3.0.0",
+  "description": "Multi-Shop Management with RBAC",
   "main": "server.js",
   "engines": {
     "node": "20.x"
