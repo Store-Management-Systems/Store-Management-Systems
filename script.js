@@ -1,4 +1,4 @@
-// ─── SHOP MANAGEMENT SYSTEM - FRONTEND INTEGRATION ────────────────────────────
+// ─── SHOP MANAGEMENT SYSTEM - B2B & B2C ENTERPRISE FRONTEND ────────────────────────
 
 const API_URL = '/api';
 
@@ -22,7 +22,7 @@ let state = {
   units: [],
   bills: [],
   logs: [],
-  customers: [],
+  people: [],
   shops: [],
   users: [],
   roles: []
@@ -30,7 +30,7 @@ let state = {
 
 // Cart State for Billing List View
 let billCart = []; // Array of { itemId, name, price, qty, stock, unit }
-let billCustomer = { name: '', phone: '' };
+let billCustomer = { personId: null, name: '', phone: '' };
 
 // ─── API Helper Function ───────────────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
@@ -101,7 +101,6 @@ async function checkAuth() {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
 
-      // Setup Admin Shop Switcher if Admin
       if (currentUser.role === 'Admin') {
         loadAdminShops();
       } else {
@@ -201,16 +200,18 @@ async function handleAdminShopSwitch(shopId) {
 // ─── Load Initial Backend Data ────────────────────────────────────────────────
 async function loadInitialData() {
   try {
-    const [itemsRes, catsRes, unitsRes, settingsRes] = await Promise.all([
+    const [itemsRes, catsRes, unitsRes, settingsRes, peopleRes] = await Promise.all([
       apiFetch('/items'),
       apiFetch('/categories'),
       apiFetch('/units'),
-      apiFetch('/settings')
+      apiFetch('/settings'),
+      apiFetch('/people')
     ]);
 
     if (itemsRes.success) state.items = itemsRes.data || [];
     if (catsRes.success) state.categories = (catsRes.data || []).map(c => c.name || c);
     if (unitsRes.success) state.units = (unitsRes.data || []).map(u => u.name || u);
+    if (peopleRes.success) state.people = peopleRes.data || [];
     if (settingsRes.success && settingsRes.data) {
       state.shop = { ...state.shop, ...settingsRes.data };
     }
@@ -240,11 +241,13 @@ function renderSection(name) {
 
   switch (name) {
     case 'dashboard': renderDashboard(c); break;
+    case 'people': renderPeopleSection(c); break;
     case 'stock': renderStock(c); break;
     case 'bill': renderBill(c); break;
+    case 'analytics': renderAnalytics(c); break;
     case 'history': renderHistory(c); break;
     case 'settings': renderSettings(c); break;
-    case 'customers': renderCustomers(c); break;
+    case 'customers': renderPeopleSection(c, 'Customer'); break;
   }
   updateTopbar();
 }
@@ -262,7 +265,7 @@ function updateTopbar() {
 
 // ─── 1. Dashboard Section ─────────────────────────────────────────────────────
 async function renderDashboard(c) {
-  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Analytics...</div>`;
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading B2B & B2C Dashboard...</div>`;
 
   try {
     const res = await apiFetch('/dashboard');
@@ -271,14 +274,19 @@ async function renderDashboard(c) {
     const stats = res.data;
     const lowStockCount = stats.items.lowStockCount || 0;
     const todayRev = stats.revenue.today || 0;
-    const totalRev = stats.revenue.total || 0;
     const todayBillsCount = stats.bills.today || 0;
     const totalItemsCount = stats.items.total || 0;
+
+    const custW = stats.customersWidget || { total: 0, active: 0, outstanding: 0 };
+    const partyW = stats.partiesWidget || { total: 0, receivable: 0, overdue: 0 };
+    const suppW = stats.suppliersWidget || { total: 0, payable: 0, overdue: 0 };
+    const finW = stats.financeWidget || { totalReceivable: 0, totalPayable: 0, netOutstanding: 0, todayCollections: 0, todayPayments: 0 };
 
     c.innerHTML = `
     <div class="fade-in">
       ${lowStockCount > 0 ? `<div class="alert alert-warn">⚠ ${lowStockCount} item${lowStockCount > 1 ? 's' : ''} running low on stock!</div>` : ''}
 
+      <!-- Core Quick Metrics -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" style="color:var(--ios-blue);">${totalItemsCount}</div>
@@ -289,47 +297,82 @@ async function renderDashboard(c) {
           <div class="stat-label">Low Stock</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--ios-indigo);">${state.shop.currency}${todayRev.toFixed(0)}</div>
-          <div class="stat-label">Today's Revenue</div>
+          <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${finW.todayCollections.toFixed(0)}</div>
+          <div class="stat-label">Today's Collections</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--ios-purple);">${todayBillsCount}</div>
-          <div class="stat-label">Today's Bills</div>
+          <div class="stat-value" style="color:var(--ios-indigo);">${state.shop.currency}${todayRev.toFixed(0)}</div>
+          <div class="stat-label">Today's Sales</div>
         </div>
       </div>
 
-      ${currentUser && (currentUser.role === 'Admin' || currentUser.role === 'Owner') ? `
-      <div class="card">
+      <!-- Financial Receivable & Payable Overview Card -->
+      <div class="card" style="background:linear-gradient(135deg, rgba(0,122,255,0.06), rgba(52,199,89,0.06));border:1px solid rgba(0,122,255,0.2);">
         <div class="card-header">
-          <h3>Admin Controls</h3>
+          <h3>💰 Financial Position Overview</h3>
+          <button class="btn-sm btn-secondary" onclick="showSection('analytics')">📊 Analytics</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          ${currentUser.role === 'Admin' ? `<button class="btn-secondary" onclick="openShopsModal()">🏪 Manage Shops</button>` : ''}
-          <button class="btn-secondary" onclick="openUsersModal()">👥 Manage Users</button>
-          <button class="btn-secondary" onclick="openCustomersModal()">📱 Customers</button>
-          <button class="btn-secondary" onclick="openReportsModal()">📊 Download Reports</button>
-        </div>
-      </div>` : ''}
-
-      <div class="card">
-        <div class="card-header">
-          <h3>Quick Actions</h3>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <button class="btn-primary" onclick="showSection('bill')" style="padding:14px;font-size:14px;">🧾 New Bill</button>
-          <button class="btn-secondary" onclick="openAddItem()" style="padding:14px;font-size:14px;">➕ Add Item</button>
-          <button class="btn-secondary" onclick="openStockIn()" style="padding:14px;font-size:14px;">📥 Stock In</button>
-          <button class="btn-secondary" onclick="openStockOut()" style="padding:14px;font-size:14px;">📤 Stock Out</button>
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;text-align:center;">
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL RECEIVABLE</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ios-green);margin-top:2px;">${state.shop.currency}${finW.totalReceivable.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Customers & B2B Parties</div>
+          </div>
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL PAYABLE</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ios-red);margin-top:2px;">${state.shop.currency}${finW.totalPayable.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Suppliers Restock</div>
+          </div>
+          <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">NET OUTSTANDING</div>
+            <div style="font-size:20px;font-weight:800;color:${finW.netOutstanding >= 0 ? 'var(--ios-blue)' : 'var(--ios-purple)'};margin-top:2px;">${state.shop.currency}${finW.netOutstanding.toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Net Balance</div>
+          </div>
         </div>
       </div>
 
+      <!-- People Entity Cards Summary Grid -->
+      <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;margin-bottom:16px;">
+        <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
+          <div style="font-size:12px;font-weight:700;color:var(--ios-green);">📱 RETAIL B2C</div>
+          <div style="font-size:18px;font-weight:800;margin-top:4px;">${custW.total} Customers</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${custW.outstanding.toFixed(0)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
+          <div style="font-size:12px;font-weight:700;color:var(--ios-blue);">🏢 B2B PARTIES</div>
+          <div style="font-size:18px;font-weight:800;margin-top:4px;">${partyW.total} Parties</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${partyW.receivable.toFixed(0)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
+          <div style="font-size:12px;font-weight:700;color:var(--ios-purple);">🚚 SUPPLIERS</div>
+          <div style="font-size:18px;font-weight:800;margin-top:4px;">${suppW.total} Suppliers</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Payable: ${state.shop.currency}${suppW.payable.toFixed(0)}</div>
+        </div>
+      </div>
+
+      <!-- Quick Actions Grid -->
       <div class="card">
-        <div class="card-header"><h3>Recent Bills</h3></div>
+        <div class="card-header">
+          <h3>Quick Enterprise Actions</h3>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;">
+          <button class="btn-primary" onclick="showSection('bill')" style="padding:12px;font-size:13px;">🧾 New Bill</button>
+          <button class="btn-secondary" onclick="openNewPurchaseModal()" style="padding:12px;font-size:13px;">📥 B2B Purchase</button>
+          <button class="btn-secondary" onclick="openAddPersonModal('Party')" style="padding:12px;font-size:13px;">🏢 Add Party</button>
+          <button class="btn-secondary" onclick="openAddPersonModal('Supplier')" style="padding:12px;font-size:13px;">🚚 Add Supplier</button>
+        </div>
+      </div>
+
+      <!-- Recent Bills -->
+      <div class="card">
+        <div class="card-header"><h3>Recent Invoices & Bills</h3></div>
         ${!stats.recentBills || stats.recentBills.length === 0 ? '<div class="empty-state" style="padding:20px"><p>No bills generated yet</p></div>' :
           stats.recentBills.map(b => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
               <div>
-                <div style="font-size:14px;font-weight:700;">#${b.bill_number || b.billNo}</div>
+                <div style="font-size:14px;font-weight:700;">#${b.bill_number || b.billNo} <span class="badge ${b.due_amount > 0 ? 'badge-partial' : 'badge-paid'}">${b.payment_status || 'Paid'}</span></div>
                 <div style="font-size:11px;color:var(--text-muted);">${b.customer_name || 'Walk-in'} · ${formatDate(b.created_at || b.date)}</div>
               </div>
               <div style="text-align:right;">
@@ -340,29 +383,494 @@ async function renderDashboard(c) {
           `).join('')
         }
       </div>
-
-      ${stats.items.lowStockItems && stats.items.lowStockItems.length > 0 ? `
-      <div class="card">
-        <div class="card-header"><h3>⚠ Low Stock Alerts</h3></div>
-        ${stats.items.lowStockItems.map(i => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
-            <div style="font-size:14px;font-weight:600;">📦 ${i.name}</div>
-            <span class="badge badge-danger">${i.stock} ${i.unit}</span>
-          </div>
-        `).join('')}
-      </div>` : ''}
     </div>`;
   } catch (err) {
     c.innerHTML = `<div class="alert alert-warn">Failed to load dashboard statistics: ${err.message}</div>`;
   }
 }
 
-// ─── 2. Billing Section (LIST VIEW & TAP TO ADD QUANTITY) ─────────────────────
+// ─── 2. Unified People (B2B & B2C) Section ────────────────────────────────────
+let peopleCategoryTab = 'All';
+let peopleSearchQuery = '';
+
+async function renderPeopleSection(c, forceTab = null) {
+  if (forceTab) peopleCategoryTab = forceTab;
+
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Records...</div>`;
+
+  try {
+    const res = await apiFetch(`/people?category=${peopleCategoryTab}&search=${encodeURIComponent(peopleSearchQuery)}`);
+    if (res.success) state.people = res.data || [];
+  } catch (e) {}
+
+  c.innerHTML = `
+  <div class="fade-in">
+    <!-- Category Tabs -->
+    <div class="tabs">
+      <button class="tab ${peopleCategoryTab === 'All' ? 'active' : ''}" onclick="peopleCategoryTab='All';renderPeopleSection(document.getElementById('mainContent'))">All People</button>
+      <button class="tab ${peopleCategoryTab === 'Customer' ? 'active' : ''}" onclick="peopleCategoryTab='Customer';renderPeopleSection(document.getElementById('mainContent'))">Customers (B2C)</button>
+      <button class="tab ${peopleCategoryTab === 'Party' ? 'active' : ''}" onclick="peopleCategoryTab='Party';renderPeopleSection(document.getElementById('mainContent'))">Parties (B2B)</button>
+      <button class="tab ${peopleCategoryTab === 'Supplier' ? 'active' : ''}" onclick="peopleCategoryTab='Supplier';renderPeopleSection(document.getElementById('mainContent'))">Suppliers</button>
+    </div>
+
+    <!-- Search & Actions -->
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search by name, mobile, business name, GST..." value="${peopleSearchQuery}" oninput="peopleSearchQuery=this.value;renderPeopleSection(document.getElementById('mainContent'))">
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:14px;">
+      <button class="btn-primary" style="flex:1;" onclick="openAddPersonModal('${peopleCategoryTab === 'All' ? 'Customer' : peopleCategoryTab}')">➕ Add New ${peopleCategoryTab === 'All' ? 'Entity' : peopleCategoryTab}</button>
+      <button class="btn-secondary" style="flex:1;" onclick="openNewPurchaseModal()">📥 Restock Purchase</button>
+    </div>
+
+    <!-- Entity Cards List -->
+    ${state.people.length === 0 ? '<div class="empty-state"><div class="empty-state-icon">👥</div><p>No entity records found.</p></div>' :
+      state.people.map(p => {
+        const isSupplier = p.category === 'Supplier';
+        const dueVal = parseFloat(p.due_amount || 0);
+
+        return `
+          <div class="person-card">
+            <div class="person-avatar ${p.category.toLowerCase()}">
+              ${p.category === 'Customer' ? '📱' : p.category === 'Party' ? '🏢' : '🚚'}
+            </div>
+            <div class="person-details">
+              <div class="person-title">${p.name} ${p.business_name ? `<span style="font-size:13px;font-weight:600;color:var(--text-secondary);">(${p.business_name})</span>` : ''}</div>
+              <div class="person-subtitle">
+                📞 ${p.mobile || 'No Mobile'} · ${p.city || p.state || 'Local'} ${p.gstin ? '· GST: ' + p.gstin : ''}
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+                ${isSupplier ? `Total Restock Purchases: ${state.shop.currency}${(p.total_purchases || 0).toFixed(2)}` : `Total Sales: ${state.shop.currency}${(p.total_sales || 0).toFixed(2)}`}
+              </div>
+            </div>
+
+            <div class="person-due-container">
+              <div class="due-label">${isSupplier ? 'Payable Due' : 'Receivable Due'}</div>
+              <div class="due-value ${dueVal > 0 ? (isSupplier ? 'payable' : 'receivable') : 'zero'}">
+                ${state.shop.currency}${Math.abs(dueVal).toFixed(2)}
+              </div>
+              <div style="display:flex;gap:4px;margin-top:6px;justify-content:flex-end;">
+                <button class="btn-sm btn-secondary" onclick="openLedgerModal('${p.id}')">📘 Ledger</button>
+                <button class="btn-sm btn-primary" onclick="openRecordPaymentModal('${p.id}')">💳 Pay</button>
+                <button class="btn-sm btn-danger" onclick="deletePersonSubmit('${p.id}')">🗑</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')
+    }
+  </div>`;
+}
+
+// Add/Edit Person Modal
+function openAddPersonModal(defaultCategory = 'Customer') {
+  showModal(`Add New ${defaultCategory}`, `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Category *</label>
+        <select id="pCategory">
+          <option ${defaultCategory === 'Customer' ? 'selected' : ''}>Customer</option>
+          <option ${defaultCategory === 'Party' ? 'selected' : ''}>Party</option>
+          <option ${defaultCategory === 'Supplier' ? 'selected' : ''}>Supplier</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input type="text" id="pName" placeholder="e.g. Acme Enterprises / Rahul Sharma" required>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Business Name (Optional)</label>
+        <input type="text" id="pBusiness" placeholder="Trade / Firm Name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mobile Number *</label>
+        <input type="tel" id="pMobile" placeholder="10-digit Mobile">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">GSTIN (Optional)</label>
+        <input type="text" id="pGstin" placeholder="22AAAAA0000A1Z5">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PAN (Optional)</label>
+        <input type="text" id="pPan" placeholder="ABCDE1234F">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Opening Balance (${state.shop.currency})</label>
+        <input type="number" id="pOpeningBal" placeholder="0.00" step="0.01">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Credit Limit (${state.shop.currency})</label>
+        <input type="number" id="pCreditLimit" placeholder="50000" step="0.01">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Address & City</label>
+      <input type="text" id="pAddress" placeholder="Street Address, City, State, Pincode">
+    </div>
+
+    <button class="btn-primary" style="width:100%;padding:14px;" onclick="savePersonSubmit()">✅ Save Entity Record</button>
+  `);
+}
+
+async function savePersonSubmit() {
+  const category = document.getElementById('pCategory').value;
+  const name = document.getElementById('pName').value.trim();
+  const business_name = document.getElementById('pBusiness').value.trim();
+  const mobile = document.getElementById('pMobile').value.trim();
+  const gstin = document.getElementById('pGstin').value.trim();
+  const pan = document.getElementById('pPan').value.trim();
+  const opening_balance = parseFloat(document.getElementById('pOpeningBal').value) || 0;
+  const credit_limit = parseFloat(document.getElementById('pCreditLimit').value) || 0;
+  const address = document.getElementById('pAddress').value.trim();
+
+  if (!name) { alert('Name is required'); return; }
+
+  try {
+    const res = await apiFetch('/people', {
+      method: 'POST',
+      body: JSON.stringify({ category, name, business_name, mobile, gstin, pan, opening_balance, credit_limit, address })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast(`✅ ${category} record created`);
+      renderPeopleSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to create record');
+  }
+}
+
+async function deletePersonSubmit(id) {
+  if (!confirm('Are you sure you want to delete this record?')) return;
+  try {
+    const res = await apiFetch(`/people/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      toast('🗑 Record deleted');
+      renderPeopleSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ─── 3. Ledger System Modal ────────────────────────────────────────────────────
+async function openLedgerModal(personId) {
+  showModal('📘 Party / Customer Account Ledger', `<div style="text-align:center;padding:30px;">⏳ Loading Ledger...</div>`);
+
+  try {
+    const res = await apiFetch(`/ledgers/${personId}`);
+    if (!res.success || !res.data) throw new Error(res.message);
+
+    const { person, current_due, entries } = res.data;
+
+    const ledgerHtml = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;background:rgba(0,122,255,0.06);padding:12px;border-radius:14px;border:1px solid rgba(0,122,255,0.15);">
+        <div>
+          <div style="font-size:16px;font-weight:800;">${person.name} (${person.category})</div>
+          <div style="font-size:12px;color:var(--text-muted);">${person.business_name ? person.business_name + ' · ' : ''}📞 ${person.mobile || 'N/A'}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;">Net Outstanding Due</div>
+          <div style="font-size:20px;font-weight:800;color:${current_due > 0 ? (person.category === 'Supplier' ? 'var(--ios-red)' : 'var(--ios-green)') : 'var(--text-primary)'};">
+            ${state.shop.currency}${Math.abs(current_due).toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn-sm btn-secondary" onclick="window.open('${API_URL}/ledgers/${personId}/export/excel?token=${localStorage.getItem('sms_token')}')">📗 Excel</button>
+        <button class="btn-sm btn-accent" onclick="window.open('${API_URL}/ledgers/${personId}/export/pdf?token=${localStorage.getItem('sms_token')}')">📕 PDF Statement</button>
+        <button class="btn-sm btn-primary" onclick="openRecordPaymentModal('${personId}')" style="margin-left:auto;">💳 Record Payment</button>
+      </div>
+
+      <div style="max-height:360px;overflow-y:auto;">
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Entry Type</th>
+              <th>Debit (Dr)</th>
+              <th>Credit (Cr)</th>
+              <th>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No ledger transaction entries yet</td></tr>' :
+              entries.map(e => `
+                <tr>
+                  <td>${formatDate(e.created_at)}</td>
+                  <td><strong>${e.entry_type}</strong><br><span style="font-size:10px;color:var(--text-muted);">${e.notes || ''}</span></td>
+                  <td class="text-debit">${e.debit > 0 ? state.shop.currency + e.debit.toFixed(2) : '-'}</td>
+                  <td class="text-credit">${e.credit > 0 ? state.shop.currency + e.credit.toFixed(2) : '-'}</td>
+                  <td class="text-balance">${state.shop.currency}${e.running_balance.toFixed(2)}</td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    document.getElementById('modalBody').innerHTML = ledgerHtml;
+  } catch (err) {
+    document.getElementById('modalBody').innerHTML = `<div class="alert alert-warn">${err.message}</div>`;
+  }
+}
+
+// ─── 4. Payment Management Module ─────────────────────────────────────────────
+async function openRecordPaymentModal(personId) {
+  let person = state.people.find(p => p.id === personId);
+  if (!person) {
+    try {
+      const res = await apiFetch(`/people/${personId}`);
+      if (res.success) person = res.data;
+    } catch (e) {}
+  }
+
+  showModal('💳 Record Financial Payment / Collection', `
+    <div style="background:rgba(0,122,255,0.06);padding:12px;border-radius:12px;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;">${person ? person.name : 'Selected Party'}</div>
+      <div style="font-size:12px;color:var(--text-muted);">Category: ${person ? person.category : 'Entity'}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Payment Amount (${state.shop.currency}) *</label>
+      <input type="number" id="payAmount" placeholder="0.00" min="0.01" step="0.01" required style="font-size:18px;font-weight:800;">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Payment Mode *</label>
+        <select id="payMode">
+          <option>Cash</option>
+          <option>UPI</option>
+          <option>Bank Transfer</option>
+          <option>Card</option>
+          <option>Cheque</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reference No / Txn ID</label>
+        <input type="text" id="payRef" placeholder="UPI Txn / Cheque No">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Notes / Remarks</label>
+      <input type="text" id="payNotes" placeholder="Payment received against invoice">
+    </div>
+
+    <button class="btn-success" style="width:100%;padding:14px;font-size:16px;" onclick="savePaymentSubmit('${personId}')">✅ Confirm & Save Payment</button>
+  `);
+}
+
+async function savePaymentSubmit(personId) {
+  const amount = parseFloat(document.getElementById('payAmount').value);
+  const payment_mode = document.getElementById('payMode').value;
+  const reference_no = document.getElementById('payRef').value.trim();
+  const notes = document.getElementById('payNotes').value.trim();
+
+  if (isNaN(amount) || amount <= 0) {
+    alert('Please enter a valid positive payment amount');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/payments', {
+      method: 'POST',
+      body: JSON.stringify({ personId, amount, payment_mode, reference_no, notes })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast('💳 Payment recorded successfully');
+      renderPeopleSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to record payment');
+  }
+}
+
+// ─── 5. B2B Restock Purchase Invoice Modal ─────────────────────────────────────
+function openNewPurchaseModal() {
+  const suppliers = state.people.filter(p => p.category === 'Supplier');
+  if (suppliers.length === 0) {
+    alert('Please add at least one Supplier in the People section first.');
+    openAddPersonModal('Supplier');
+    return;
+  }
+
+  showModal('📥 New B2B Supplier Restock Purchase', `
+    <div class="form-group">
+      <label class="form-label">Select Supplier *</label>
+      <select id="purSupplier">
+        ${suppliers.map(s => `<option value="${s.id}">🚚 ${s.name} ${s.business_name ? '(' + s.business_name + ')' : ''}</option>`).join('')}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Supplier Invoice No</label>
+        <input type="text" id="purInvNo" placeholder="INV-2026-99">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Mode</label>
+        <select id="purPayMode">
+          <option>Bank Transfer</option>
+          <option>Cash</option>
+          <option>UPI</option>
+          <option>Cheque</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" style="padding:12px;margin-bottom:12px;">
+      <label class="form-label">Restock Inventory Item</label>
+      <div class="form-row">
+        <select id="purItemSelect">
+          <option value="">Choose item...</option>
+          ${state.items.map(i => `<option value="${i.id}">${i.name} (Buy: ${state.shop.currency}${i.buy_price || 0})</option>`).join('')}
+        </select>
+        <input type="number" id="purQty" placeholder="Qty" min="1" value="1">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Initial Paid Amount (${state.shop.currency})</label>
+      <input type="number" id="purPaidAmt" placeholder="0.00" min="0" step="0.01">
+    </div>
+
+    <button class="btn-primary" style="width:100%;padding:14px;" onclick="savePurchaseSubmit()">✅ Confirm B2B Restock</button>
+  `);
+}
+
+async function savePurchaseSubmit() {
+  const supplierId = document.getElementById('purSupplier').value;
+  const supplier_invoice_no = document.getElementById('purInvNo').value.trim();
+  const itemId = document.getElementById('purItemSelect').value;
+  const qty = parseFloat(document.getElementById('purQty').value) || 0;
+  const paidAmount = parseFloat(document.getElementById('purPaidAmt').value) || 0;
+  const paymentMode = document.getElementById('purPayMode').value;
+
+  if (!supplierId || !itemId || qty <= 0) {
+    alert('Please select a supplier, item, and valid quantity');
+    return;
+  }
+
+  const selectedItem = state.items.find(i => i.id === itemId);
+  const buy_price = selectedItem ? (selectedItem.buy_price || selectedItem.selling_price || 10) : 10;
+
+  try {
+    const res = await apiFetch('/purchases', {
+      method: 'POST',
+      body: JSON.stringify({
+        supplierId,
+        supplier_invoice_no,
+        items: [{ itemId, name: selectedItem.name, buy_price, qty }],
+        paidAmount,
+        paymentMode
+      })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast('✅ Restock Purchase recorded');
+      await loadInitialData();
+      renderSection('stock');
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to record purchase');
+  }
+}
+
+// ─── 6. Analytics Section ─────────────────────────────────────────────────────
+async function renderAnalytics(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Financial Analytics...</div>`;
+
+  try {
+    const res = await apiFetch('/analytics');
+    if (!res.success || !res.data) throw new Error(res.message);
+
+    const { topCustomers, topSuppliers, ageingBuckets } = res.data;
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div class="card">
+        <div class="card-header">
+          <h3>📊 Accounts Ageing Breakdown (Days Outstanding)</h3>
+        </div>
+        <div class="aging-grid">
+          <div class="aging-card">
+            <div class="aging-val" style="color:var(--ios-green);">${state.shop.currency}${(ageingBuckets.bucket0_30 || 0).toFixed(0)}</div>
+            <div class="aging-lbl">0 - 30 Days</div>
+          </div>
+          <div class="aging-card">
+            <div class="aging-val" style="color:var(--ios-blue);">${state.shop.currency}${(ageingBuckets.bucket31_60 || 0).toFixed(0)}</div>
+            <div class="aging-lbl">31 - 60 Days</div>
+          </div>
+          <div class="aging-card">
+            <div class="aging-val" style="color:var(--ios-purple);">${state.shop.currency}${(ageingBuckets.bucket61_90 || 0).toFixed(0)}</div>
+            <div class="aging-lbl">61 - 90 Days</div>
+          </div>
+          <div class="aging-card">
+            <div class="aging-val" style="color:var(--ios-red);">${state.shop.currency}${(ageingBuckets.bucket90Plus || 0).toFixed(0)}</div>
+            <div class="aging-lbl">90+ Days Overdue</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>🏆 Top Revenue B2B / B2C Customers</h3></div>
+        ${!topCustomers || topCustomers.length === 0 ? '<div class="empty-state" style="padding:16px;"><p>No sales records yet</p></div>' :
+          topCustomers.map(tc => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <div>
+                <div style="font-weight:700;">${tc.name}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${tc.bill_count} Sales Bills</div>
+              </div>
+              <div style="font-weight:800;color:var(--ios-green);">${state.shop.currency}${parseFloat(tc.total_revenue || 0).toFixed(2)}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>🚚 Top Restock Suppliers</h3></div>
+        ${!topSuppliers || topSuppliers.length === 0 ? '<div class="empty-state" style="padding:16px;"><p>No restock purchases yet</p></div>' :
+          topSuppliers.map(ts => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <div>
+                <div style="font-weight:700;">${ts.name} (${ts.business_name || 'Supplier'})</div>
+                <div style="font-size:11px;color:var(--text-muted);">${ts.purchase_count} Restock Invoices</div>
+              </div>
+              <div style="font-weight:800;color:var(--ios-purple);">${state.shop.currency}${parseFloat(ts.total_purchased || 0).toFixed(2)}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">${err.message}</div>`;
+  }
+}
+
+// ─── 7. Billing Section ───────────────────────────────────────────────────────
 let billSearchQuery = '';
 let billSelectedCat = 'All';
 
 async function renderBill(c) {
-  // Fetch fresh items for billing list view
   try {
     const res = await apiFetch('/items');
     if (res.success) state.items = res.data || [];
@@ -378,10 +886,20 @@ async function renderBill(c) {
   const tax = subtotal * (state.shop.taxRate || 0) / 100;
   const total = subtotal + tax;
 
+  const b2bEntities = state.people.filter(p => p.category === 'Customer' || p.category === 'Party');
+
   c.innerHTML = `
   <div class="fade-in">
-    <!-- Customer Info Card -->
+    <!-- Customer / Party Info Selection -->
     <div class="card" style="padding:12px 14px;margin-bottom:10px;">
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label">Link Customer / B2B Party</label>
+        <select id="billPartySelect" onchange="handleBillPartySelect(this.value)">
+          <option value="">Walk-in Customer (Retail B2C Cash)</option>
+          ${b2bEntities.map(p => `<option value="${p.id}" ${billCustomer.personId === p.id ? 'selected' : ''}>[${p.category}] ${p.name} ${p.business_name ? '(' + p.business_name + ')' : ''} · 📞 ${p.mobile || 'N/A'}</option>`).join('')}
+        </select>
+      </div>
+
       <div class="form-row">
         <div class="form-group" style="margin-bottom:0;">
           <label class="form-label">Customer Name</label>
@@ -394,21 +912,21 @@ async function renderBill(c) {
       </div>
     </div>
 
-    <!-- Instant Search & Category Filter -->
+    <!-- Search & Filter -->
     <div class="search-box">
       <span class="search-icon">🔍</span>
       <input type="text" id="billSearchInput" placeholder="Search items by name..." value="${billSearchQuery}" oninput="billSearchQuery=this.value;renderSection('bill')">
     </div>
 
-    <!-- Item List View for Billing -->
+    <!-- Items Grid List -->
     <div class="card" style="padding:12px;">
       <div class="card-header" style="margin-bottom:8px;">
         <h3>Select Items</h3>
         <span style="font-size:12px;color:var(--text-muted);">${filteredItems.length} items found</span>
       </div>
 
-      <div style="max-height:340px;overflow-y:auto;padding-right:2px;">
-        ${filteredItems.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No items found. Add items to inventory first.</div>' :
+      <div style="max-height:320px;overflow-y:auto;padding-right:2px;">
+        ${filteredItems.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No items found in inventory.</div>' :
           filteredItems.map(i => {
             const inCart = billCart.find(c => c.itemId === i.id);
             const cartQty = inCart ? inCart.qty : 0;
@@ -434,7 +952,7 @@ async function renderBill(c) {
       </div>
     </div>
 
-    <!-- Cart Summary & Checkout -->
+    <!-- Cart Checkout -->
     ${billCart.length > 0 ? `
     <div class="card fade-in" style="margin-top:12px;">
       <div class="card-header">
@@ -443,7 +961,7 @@ async function renderBill(c) {
       </div>
 
       <div style="max-height:160px;overflow-y:auto;margin-bottom:10px;">
-        ${billCart.map((item, idx) => `
+        ${billCart.map(item => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;">
             <div>
               <span style="font-weight:600;">${item.name}</span>
@@ -463,6 +981,18 @@ async function renderBill(c) {
       <button class="btn-primary" style="width:100%;margin-top:14px;padding:14px;font-size:16px;" onclick="generateBillSubmit()">🧾 Complete & Print Bill</button>
     </div>` : ''}
   </div>`;
+}
+
+function handleBillPartySelect(personId) {
+  if (!personId) {
+    billCustomer = { personId: null, name: '', phone: '' };
+  } else {
+    const p = state.people.find(x => x.id === personId);
+    if (p) {
+      billCustomer = { personId: p.id, name: p.name, phone: p.mobile || '' };
+    }
+  }
+  renderSection('bill');
 }
 
 function incrementCartItem(itemId) {
@@ -517,6 +1047,7 @@ async function generateBillSubmit() {
   const total = subtotal + tax;
 
   const payload = {
+    personId: billCustomer.personId || null,
     customerName: billCustomer.name.trim() || 'Walk-in Customer',
     customerPhone: billCustomer.phone.trim(),
     items: billCart,
@@ -537,7 +1068,7 @@ async function generateBillSubmit() {
       toast('✅ Bill Generated Successfully!');
 
       billCart = [];
-      billCustomer = { name: '', phone: '' };
+      billCustomer = { personId: null, name: '', phone: '' };
 
       showBillReceipt(generatedBill);
     }
@@ -607,7 +1138,7 @@ function printBill(billId) {
   pa.style.display = 'none';
 }
 
-// ─── 3. Stock & Items Section ─────────────────────────────────────────────────
+// ─── Stock Section ─────────────────────────────────────────────────────────────
 let stockTab = 'all';
 let stockSearch = '';
 
@@ -749,7 +1280,7 @@ async function doStockInSubmit() {
 }
 
 async function doStockOutSubmit() {
-  const itemId = document.getElementById('siItem').value;
+  const itemId = document.getElementById('soItem').value;
   const qty = parseFloat(document.getElementById('soQty').value);
   if (!itemId || isNaN(qty) || qty <= 0) { alert('Please select an item and enter valid quantity'); return; }
 
@@ -768,7 +1299,6 @@ async function doStockOutSubmit() {
   }
 }
 
-// Item Add / Edit Modal
 function openAddItem() {
   showModal('Add New Item', `
     <div class="form-group">
@@ -864,9 +1394,6 @@ async function saveItemSubmit(id) {
     });
 
     if (res.success) {
-      if (res.data && res.data.warning) {
-        alert(res.data.warning);
-      }
       closeModal();
       toast(id ? '✅ Item updated' : '✅ Item created');
       renderSection('stock');
@@ -889,7 +1416,7 @@ async function deleteItem(id) {
   }
 }
 
-// ─── 4. History Section ───────────────────────────────────────────────────────
+// ─── 8. History Section ───────────────────────────────────────────────────────
 async function renderHistory(c) {
   c.innerHTML = `
   <div class="fade-in">
@@ -923,7 +1450,7 @@ async function renderHistoryBills() {
       <div class="card" style="margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <div style="font-weight:700;font-size:15px;">#${b.bill_number || b.billNo}</div>
+            <div style="font-weight:700;font-size:15px;">#${b.bill_number || b.billNo} <span class="badge ${b.due_amount > 0 ? 'badge-partial' : 'badge-paid'}">${b.payment_status || 'Paid'}</span></div>
             <div style="font-size:12px;color:var(--text-muted);">${b.customer_name || 'Walk-in'} ${b.customer_phone ? '· ' + b.customer_phone : ''}</div>
             <div style="font-size:11px;color:var(--text-light);">${formatDateFull(b.created_at || b.date)}</div>
           </div>
@@ -981,7 +1508,7 @@ async function viewBill(id) {
   }
 }
 
-// ─── 5. Settings Section ──────────────────────────────────────────────────────
+// ─── 9. Settings Section ──────────────────────────────────────────────────────
 async function renderSettings(c) {
   c.innerHTML = `
   <div class="fade-in">
@@ -1081,7 +1608,7 @@ async function saveSettingsSubmit() {
   }
 }
 
-// ─── 6. Reports Modal & Export ────────────────────────────────────────────────
+// ─── 10. Reports Modal & Export ───────────────────────────────────────────────
 function openReportsModal() {
   const today = new Date().toISOString().split('T')[0];
 
@@ -1090,11 +1617,11 @@ function openReportsModal() {
       <label class="form-label">Report Type</label>
       <select id="repType">
         <option value="Billing">Billing & Sales Report</option>
-        <option value="Financial">Financial & Profit Report</option>
+        <option value="Outstanding">B2B & B2C Outstanding Report</option>
+        <option value="Purchases">Supplier Purchase Restock Report</option>
         <option value="Inventory">Inventory Stock Value Report</option>
         <option value="Low Stock">Low Stock Report</option>
         <option value="Stock Logs">Stock Activity Log</option>
-        <option value="Customer">Customer Report</option>
       </select>
     </div>
 
@@ -1128,7 +1655,7 @@ function downloadReport(format) {
   toast(`📥 Downloading ${type} ${format.toUpperCase()} Report...`);
 }
 
-// ─── 7. Admin & User Management Modals ────────────────────────────────────────
+// ─── 11. Admin & User Management Modals ───────────────────────────────────────
 async function openUsersModal() {
   try {
     const [usersRes, permsRes] = await Promise.all([
@@ -1180,6 +1707,8 @@ function openCreateUserModal(permsCsv) {
       <select id="uRole">
         <option>Manager</option>
         <option>Cashier</option>
+        <option>Purchase Staff</option>
+        <option>Accountant</option>
         <option>Staff</option>
         <option>Owner</option>
       </select>
@@ -1229,7 +1758,7 @@ async function createUserSubmit() {
   }
 }
 
-// ─── 8. Admin Multi-Shop Modal ────────────────────────────────────────────────
+// ─── 12. Admin Multi-Shop Modal ───────────────────────────────────────────────
 async function openShopsModal() {
   try {
     const res = await apiFetch('/shops');
@@ -1386,10 +1915,9 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.style.opacity = '0', 2500);
 }
 
-// Quick Stock Helpers
 function openStockIn() { showSection('stock'); stockTab = 'in'; renderSection('stock'); }
 function openStockOut() { showSection('stock'); stockTab = 'out'; renderSection('stock'); }
-function openCustomersModal() { showSection('customers'); }
+function openCustomersModal() { showSection('people'); }
 
 // ─── App Initialize ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

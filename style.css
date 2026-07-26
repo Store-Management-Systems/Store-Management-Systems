@@ -679,3 +679,107 @@ button:active {
   .modal { border-radius: 28px; margin: auto; }
   .modal-overlay { align-items: center; }
 }
+
+/* ─── B2B & B2C ENTERPRISE MANAGEMENT EXTENSIONS ─────────────────────────────── */
+
+.person-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s var(--ease-ios);
+}
+
+.person-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.person-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.person-avatar.customer { background: linear-gradient(135deg, #34c759, #30b050); }
+.person-avatar.party { background: linear-gradient(135deg, #007aff, #0056b3); }
+.person-avatar.supplier { background: linear-gradient(135deg, #af52de, #8e44ad); }
+
+.person-details { flex: 1; min-width: 0; }
+.person-title { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.person-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+.person-due-container { text-align: right; flex-shrink: 0; }
+.due-label { font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.due-value { font-size: 18px; font-weight: 800; }
+.due-value.receivable { color: var(--ios-green); }
+.due-value.payable { color: var(--ios-red); }
+.due-value.zero { color: var(--text-muted); }
+
+/* Ledger Table */
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.ledger-table th {
+  background: rgba(120, 120, 128, 0.08);
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.ledger-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+
+.ledger-table tr:last-child td { border-bottom: none; }
+
+.text-debit { color: var(--ios-red); font-weight: 700; }
+.text-credit { color: var(--ios-green); font-weight: 700; }
+.text-balance { font-weight: 800; color: var(--text-primary); }
+
+/* Aging Buckets */
+.aging-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.aging-card {
+  background: rgba(0, 122, 255, 0.04);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--border-light);
+}
+
+.aging-val { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.aging-lbl { font-size: 10px; font-weight: 700; color: var(--text-secondary); margin-top: 2px; }
+
+/* Status Badges Extended */
+.badge-paid { background: rgba(52, 199, 89, 0.15); color: #248a3d; }
+.badge-unpaid { background: rgba(255, 59, 48, 0.15); color: #d70015; }
+.badge-partial { background: rgba(255, 149, 0, 0.15); color: #c97000; }
+.badge-overdue { background: rgba(175, 82, 222, 0.15); color: #8e44ad; }

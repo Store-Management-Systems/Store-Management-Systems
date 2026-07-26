@@ -80,6 +80,34 @@ async function initNeonDatabase() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- Unified People Table (Customer B2C, Party B2B, Supplier)
+            CREATE TABLE IF NOT EXISTS people (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                category VARCHAR(30) NOT NULL DEFAULT 'Customer',
+                name VARCHAR(150) NOT NULL,
+                business_name VARCHAR(150),
+                mobile VARCHAR(50),
+                alt_mobile VARCHAR(50),
+                email VARCHAR(150),
+                gstin VARCHAR(50),
+                pan VARCHAR(50),
+                address TEXT,
+                city VARCHAR(100),
+                state VARCHAR(100),
+                pincode VARCHAR(20),
+                opening_balance NUMERIC DEFAULT 0,
+                credit_limit NUMERIC DEFAULT 0,
+                payment_terms VARCHAR(50) DEFAULT 'Net 30',
+                birthday DATE,
+                anniversary DATE,
+                loyalty_points INT DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'Active',
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS customers (
                 id VARCHAR(50) PRIMARY KEY,
                 shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
@@ -93,10 +121,41 @@ async function initNeonDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- B2B Supplier Purchases Header
+            CREATE TABLE IF NOT EXISTS purchases (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                supplier_id VARCHAR(50) REFERENCES people(id),
+                user_id VARCHAR(50),
+                purchase_number VARCHAR(50) NOT NULL,
+                supplier_invoice_no VARCHAR(100),
+                subtotal NUMERIC DEFAULT 0,
+                tax NUMERIC DEFAULT 0,
+                discount NUMERIC DEFAULT 0,
+                total NUMERIC DEFAULT 0,
+                paid_amount NUMERIC DEFAULT 0,
+                due_amount NUMERIC DEFAULT 0,
+                payment_status VARCHAR(30) DEFAULT 'Unpaid',
+                payment_mode VARCHAR(50) DEFAULT 'Bank Transfer',
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS purchase_items (
+                id VARCHAR(50) PRIMARY KEY,
+                purchase_id VARCHAR(50) REFERENCES purchases(id) ON DELETE CASCADE,
+                item_id VARCHAR(50),
+                item_name VARCHAR(150) NOT NULL,
+                buy_price NUMERIC DEFAULT 0,
+                qty NUMERIC DEFAULT 0,
+                total NUMERIC DEFAULT 0
+            );
+
             CREATE TABLE IF NOT EXISTS bills (
                 id VARCHAR(50) PRIMARY KEY,
                 shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
                 user_id VARCHAR(50),
+                person_id VARCHAR(50),
                 bill_number VARCHAR(50) NOT NULL,
                 customer_name VARCHAR(150),
                 customer_phone VARCHAR(50),
@@ -104,6 +163,9 @@ async function initNeonDatabase() {
                 tax NUMERIC DEFAULT 0,
                 discount NUMERIC DEFAULT 0,
                 total NUMERIC DEFAULT 0,
+                paid_amount NUMERIC DEFAULT 0,
+                due_amount NUMERIC DEFAULT 0,
+                payment_status VARCHAR(30) DEFAULT 'Paid',
                 payment_mode VARCHAR(50) DEFAULT 'Cash',
                 status VARCHAR(20) DEFAULT 'Completed',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -117,6 +179,32 @@ async function initNeonDatabase() {
                 price NUMERIC DEFAULT 0,
                 qty NUMERIC DEFAULT 0,
                 total NUMERIC DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS payments (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                person_id VARCHAR(50) REFERENCES people(id) ON DELETE CASCADE,
+                user_id VARCHAR(50),
+                type VARCHAR(20) NOT NULL,
+                payment_mode VARCHAR(50) DEFAULT 'Cash',
+                amount NUMERIC DEFAULT 0,
+                reference_no VARCHAR(100),
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ledgers (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                person_id VARCHAR(50) REFERENCES people(id) ON DELETE CASCADE,
+                entry_type VARCHAR(50) NOT NULL,
+                reference_id VARCHAR(50),
+                debit NUMERIC DEFAULT 0,
+                credit NUMERIC DEFAULT 0,
+                running_balance NUMERIC DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS stock_logs (
@@ -169,13 +257,24 @@ async function initNeonDatabase() {
             );
         `);
 
+        // Safely alter existing tables for schema upgrades
+        await client.query(`
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS person_id VARCHAR(50);
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0;
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS due_amount NUMERIC DEFAULT 0;
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_status VARCHAR(30) DEFAULT 'Paid';
+        `);
+
         // 2. Indexes
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_pg_items_shop ON items(shop_id);
             CREATE INDEX IF NOT EXISTS idx_pg_bills_shop ON bills(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_bills_person ON bills(person_id);
             CREATE INDEX IF NOT EXISTS idx_pg_bills_created ON bills(created_at);
-            CREATE INDEX IF NOT EXISTS idx_pg_stock_logs_shop ON stock_logs(shop_id);
-            CREATE INDEX IF NOT EXISTS idx_pg_customers_shop ON customers(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_people_shop_cat ON people(shop_id, category);
+            CREATE INDEX IF NOT EXISTS idx_pg_payments_person ON payments(person_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_ledgers_person ON ledgers(person_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_pg_purchases_supplier ON purchases(supplier_id);
         `);
 
         // 3. Seed Default Shop
@@ -195,7 +294,7 @@ async function initNeonDatabase() {
             'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item',
             'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users',
             'Shops', 'Financial Reports', 'Categories', 'Units', 'Purchase Price',
-            'Selling Price', 'History'
+            'Selling Price', 'History', 'Parties', 'Suppliers', 'Ledgers', 'Payments', 'Purchases'
         ]);
 
         const adminCheck = await client.query('SELECT id FROM users WHERE username = $1', ['admin']);
@@ -237,7 +336,7 @@ async function initNeonDatabase() {
         `, ['set_default_hq', 'shop_default_hq', 'Main Headquarters', 'Quality & Service First', '123 Central Business Ave', '9876543210', 'GSTIN12345678', '₹', 0, 5]);
 
         await client.query('COMMIT');
-        console.log('✨ Neon PostgreSQL Database Ready and Fully Provisioned!');
+        console.log('✨ Neon PostgreSQL Database Ready and Fully Provisioned with B2B/B2C Schemas!');
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('❌ Failed to initialize Neon DB:', err);
