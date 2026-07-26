@@ -32,6 +32,12 @@ let state = {
 let billCart = []; // Array of { itemId, name, price, qty, stock, unit }
 let billCustomer = { personId: null, name: '', phone: '' };
 
+// Helper to format numbers safely without crashing on strings/nulls
+function fmtNum(val, decimals = 2) {
+  const n = parseFloat(val);
+  return isNaN(n) ? (0).toFixed(decimals) : n.toFixed(decimals);
+}
+
 // ─── API Helper Function ───────────────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem('sms_token');
@@ -297,11 +303,11 @@ async function renderDashboard(c) {
           <div class="stat-label">Low Stock</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${finW.todayCollections.toFixed(0)}</div>
+          <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${fmtNum(finW.todayCollections, 0)}</div>
           <div class="stat-label">Today's Collections</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:var(--ios-indigo);">${state.shop.currency}${todayRev.toFixed(0)}</div>
+          <div class="stat-value" style="color:var(--ios-indigo);">${state.shop.currency}${fmtNum(todayRev, 0)}</div>
           <div class="stat-label">Today's Sales</div>
         </div>
       </div>
@@ -315,17 +321,17 @@ async function renderDashboard(c) {
         <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;text-align:center;">
           <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL RECEIVABLE</div>
-            <div style="font-size:20px;font-weight:800;color:var(--ios-green);margin-top:2px;">${state.shop.currency}${finW.totalReceivable.toFixed(2)}</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ios-green);margin-top:2px;">${state.shop.currency}${fmtNum(finW.totalReceivable, 2)}</div>
             <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Customers & B2B Parties</div>
           </div>
           <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">TOTAL PAYABLE</div>
-            <div style="font-size:20px;font-weight:800;color:var(--ios-red);margin-top:2px;">${state.shop.currency}${finW.totalPayable.toFixed(2)}</div>
+            <div style="font-size:20px;font-weight:800;color:var(--ios-red);margin-top:2px;">${state.shop.currency}${fmtNum(finW.totalPayable, 2)}</div>
             <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Suppliers Restock</div>
           </div>
           <div style="background:#fff;padding:12px;border-radius:12px;border:1px solid var(--border-light);">
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);">NET OUTSTANDING</div>
-            <div style="font-size:20px;font-weight:800;color:${finW.netOutstanding >= 0 ? 'var(--ios-blue)' : 'var(--ios-purple)'};margin-top:2px;">${state.shop.currency}${finW.netOutstanding.toFixed(2)}</div>
+            <div style="font-size:20px;font-weight:800;color:${finW.netOutstanding >= 0 ? 'var(--ios-blue)' : 'var(--ios-purple)'};margin-top:2px;">${state.shop.currency}${fmtNum(finW.netOutstanding, 2)}</div>
             <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Net Balance</div>
           </div>
         </div>
@@ -336,19 +342,19 @@ async function renderDashboard(c) {
         <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
           <div style="font-size:12px;font-weight:700;color:var(--ios-green);">📱 RETAIL B2C</div>
           <div style="font-size:18px;font-weight:800;margin-top:4px;">${custW.total} Customers</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${custW.outstanding.toFixed(0)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${fmtNum(custW.outstanding, 0)}</div>
         </div>
 
         <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
           <div style="font-size:12px;font-weight:700;color:var(--ios-blue);">🏢 B2B PARTIES</div>
           <div style="font-size:18px;font-weight:800;margin-top:4px;">${partyW.total} Parties</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${partyW.receivable.toFixed(0)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Due: ${state.shop.currency}${fmtNum(partyW.receivable, 0)}</div>
         </div>
 
         <div class="card" style="margin-bottom:0;padding:14px;" onclick="showSection('people')" style="cursor:pointer;">
           <div style="font-size:12px;font-weight:700;color:var(--ios-purple);">🚚 SUPPLIERS</div>
           <div style="font-size:18px;font-weight:800;margin-top:4px;">${suppW.total} Suppliers</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Payable: ${state.shop.currency}${suppW.payable.toFixed(0)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Payable: ${state.shop.currency}${fmtNum(suppW.payable, 0)}</div>
         </div>
       </div>
 
@@ -376,7 +382,7 @@ async function renderDashboard(c) {
                 <div style="font-size:11px;color:var(--text-muted);">${b.customer_name || 'Walk-in'} · ${formatDate(b.created_at || b.date)}</div>
               </div>
               <div style="text-align:right;">
-                <div style="font-size:15px;font-weight:800;color:var(--brown);">${state.shop.currency}${(b.total || 0).toFixed(2)}</div>
+                <div style="font-size:15px;font-weight:800;color:var(--brown);">${state.shop.currency}${fmtNum(b.total, 2)}</div>
                 <button class="btn-sm btn-secondary" onclick="viewBill('${b.id}')" style="margin-top:4px;">View</button>
               </div>
             </div>
@@ -1146,20 +1152,22 @@ async function renderStock(c) {
   try {
     const res = await apiFetch(`/items?search=${encodeURIComponent(stockSearch)}`);
     if (res.success) state.items = res.data || [];
-  } catch (e) {}
 
-  c.innerHTML = `
-  <div class="fade-in">
-    <div class="tabs">
-      <button class="tab ${stockTab === 'all' ? 'active' : ''}" onclick="setStockTab('all')">All Items</button>
-      <button class="tab ${stockTab === 'in' ? 'active' : ''}" onclick="setStockTab('in')">Stock In</button>
-      <button class="tab ${stockTab === 'out' ? 'active' : ''}" onclick="setStockTab('out')">Stock Out</button>
-    </div>
+    c.innerHTML = `
+    <div class="fade-in">
+      <div class="tabs">
+        <button class="tab ${stockTab === 'all' ? 'active' : ''}" onclick="setStockTab('all')">All Items</button>
+        <button class="tab ${stockTab === 'in' ? 'active' : ''}" onclick="setStockTab('in')">Stock In</button>
+        <button class="tab ${stockTab === 'out' ? 'active' : ''}" onclick="setStockTab('out')">Stock Out</button>
+      </div>
 
-    ${stockTab === 'all' ? renderAllStock() : ''}
-    ${stockTab === 'in' ? renderStockInForm() : ''}
-    ${stockTab === 'out' ? renderStockOutForm() : ''}
-  </div>`;
+      ${stockTab === 'all' ? renderAllStock() : ''}
+      ${stockTab === 'in' ? renderStockInForm() : ''}
+      ${stockTab === 'out' ? renderStockOutForm() : ''}
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load stock section: ${err.message}</div>`;
+  }
 }
 
 function setStockTab(t) { stockTab = t; renderSection('stock'); }
@@ -1170,7 +1178,11 @@ function renderAllStock() {
       <span class="search-icon">🔍</span>
       <input type="text" placeholder="Search inventory..." value="${stockSearch}" oninput="stockSearch=this.value;renderSection('stock')">
     </div>
-    <button class="btn-primary" style="width:100%;margin-bottom:12px;" onclick="openAddItem()">➕ Add New Item</button>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn-primary" style="flex:2;" onclick="openAddItem()">➕ Add New Item</button>
+      <button class="btn-secondary" style="flex:1;" onclick="setStockTab('in')">📥 Restock</button>
+      <button class="btn-secondary" style="flex:1;" onclick="setStockTab('out')">📤 Issue</button>
+    </div>
 
     ${state.items.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">📦</div><p>No items found in inventory.</p></div>` :
       state.items.map(item => `
@@ -1178,15 +1190,17 @@ function renderAllStock() {
           <div class="stock-icon">📦</div>
           <div class="stock-info">
             <div class="stock-name">${item.name}</div>
-            <div class="stock-meta">Sell: ${state.shop.currency}${(item.selling_price || item.price || 0).toFixed(2)} · ${item.category || 'General'}</div>
+            <div class="stock-meta">Sell: ${state.shop.currency}${fmtNum(item.selling_price || item.price, 2)} · ${item.category || 'General'}</div>
           </div>
           <div class="stock-qty">
             <div class="qty-num">${item.stock || item.qty || 0}</div>
             <div class="qty-unit">${item.unit || 'Pcs'}</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <button class="btn-sm btn-secondary" onclick="openEditItem('${item.id}')">✏</button>
-            <button class="btn-sm btn-danger" onclick="deleteItem('${item.id}')">🗑</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <button class="btn-sm btn-success" title="Add Stock" onclick="openQuickStockIn('${item.id}')">➕</button>
+            <button class="btn-sm btn-warn" title="Remove Stock" style="background:var(--ios-orange, #ff9500);color:#fff;border:none;" onclick="openQuickStockOut('${item.id}')">➖</button>
+            <button class="btn-sm btn-secondary" title="Edit Item" onclick="openEditItem('${item.id}')">✏</button>
+            <button class="btn-sm btn-danger" title="Delete Item" onclick="deleteItem('${item.id}')">🗑</button>
           </div>
         </div>
       `).join('')
@@ -1296,6 +1310,99 @@ async function doStockOutSubmit() {
     }
   } catch (err) {
     alert(err.message || 'Failed stock out');
+  }
+}
+
+function openQuickStockIn(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+  showModal(`📥 Quick Add Stock - ${item.name}`, `
+    <div class="form-group">
+      <label class="form-label">Current Available: <strong>${item.stock || 0} ${item.unit || 'Pcs'}</strong></label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Quantity to Add *</label>
+      <input type="number" id="quickSiQty" placeholder="e.g. 10" min="0.01" step="0.01" autofocus>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Supplier (Optional)</label>
+      <input type="text" id="quickSiSupplier" placeholder="e.g. Acme Wholesalers">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (Optional)</label>
+      <input type="text" id="quickSiNotes" placeholder="e.g. Restock">
+    </div>
+    <button class="btn-success" style="width:100%;margin-top:10px;" onclick="submitQuickStockIn('${item.id}')">✅ Confirm Add Stock</button>
+  `);
+}
+
+async function submitQuickStockIn(itemId) {
+  const qty = parseFloat(document.getElementById('quickSiQty').value);
+  if (isNaN(qty) || qty <= 0) { alert('Please enter a valid positive quantity'); return; }
+  const supplier = document.getElementById('quickSiSupplier').value;
+  const notes = document.getElementById('quickSiNotes').value;
+
+  try {
+    const res = await apiFetch('/stock/in', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, qty, supplier, notes })
+    });
+    if (res.success) {
+      closeModal();
+      toast('✅ Stock added successfully');
+      renderSection('stock');
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to add stock');
+  }
+}
+
+function openQuickStockOut(itemId) {
+  const item = state.items.find(i => i.id === itemId);
+  if (!item) return;
+  showModal(`📤 Quick Remove Stock - ${item.name}`, `
+    <div class="form-group">
+      <label class="form-label">Current Available: <strong>${item.stock || 0} ${item.unit || 'Pcs'}</strong></label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Quantity to Remove *</label>
+      <input type="number" id="quickSoQty" placeholder="e.g. 5" min="0.01" step="0.01" autofocus>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Reason</label>
+      <select id="quickSoReason">
+        <option>Sold</option>
+        <option>Damaged</option>
+        <option>Expired</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (Optional)</label>
+      <input type="text" id="quickSoNotes" placeholder="e.g. Manual Adjustment">
+    </div>
+    <button class="btn-danger" style="width:100%;margin-top:10px;" onclick="submitQuickStockOut('${item.id}')">📤 Confirm Remove Stock</button>
+  `);
+}
+
+async function submitQuickStockOut(itemId) {
+  const qty = parseFloat(document.getElementById('quickSoQty').value);
+  if (isNaN(qty) || qty <= 0) { alert('Please enter a valid positive quantity'); return; }
+  const reason = document.getElementById('quickSoReason').value;
+  const notes = document.getElementById('quickSoNotes').value;
+
+  try {
+    const res = await apiFetch('/stock/out', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, qty, reason, notes })
+    });
+    if (res.success) {
+      closeModal();
+      toast('📤 Stock removed successfully');
+      renderSection('stock');
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to remove stock');
   }
 }
 
@@ -1455,7 +1562,7 @@ async function renderHistoryBills() {
             <div style="font-size:11px;color:var(--text-light);">${formatDateFull(b.created_at || b.date)}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:17px;font-weight:800;color:var(--brown);">${state.shop.currency}${(b.total || 0).toFixed(2)}</div>
+            <div style="font-size:17px;font-weight:800;color:var(--brown);">${state.shop.currency}${fmtNum(b.total, 2)}</div>
             <button class="btn-sm btn-secondary" style="margin-top:6px;" onclick="viewBill('${b.id}')">🧾 View</button>
           </div>
         </div>
