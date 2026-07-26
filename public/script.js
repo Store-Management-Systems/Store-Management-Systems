@@ -3,18 +3,47 @@ let state = { user: null, shopId: null, shops: [], items: [], cart: {} };
 
 // --- Auth & RBAC ---
 async function handleLogin() {
-  const u = document.getElementById('loginUsername').value;
-  const p = document.getElementById('loginPassword').value;
+  const u = document.getElementById('loginUsername').value.trim();
+  const p = document.getElementById('loginPassword').value.trim();
+
+  // 1. Prevent empty submissions
+  if (!u || !p) {
+    alert("Please type 'admin' in the Username box and 'admin123' in the Password box.");
+    return;
+  }
+
   try {
-    const res = await fetch(`${API_URL}/login`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p}) });
-    const data = await res.json();
+    const res = await fetch(`${API_URL}/login`, { 
+      method: 'POST', 
+      headers: {'Content-Type':'application/json'}, 
+      body: JSON.stringify({username: u, password: p}) 
+    });
+
+    const text = await res.text(); // Read raw response first
+    
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      // 2. Catch server crashes (e.g., Render returning a 502 HTML error page)
+      alert("Server is not responding correctly. It returned HTML instead of JSON. Ensure the Render Web Service is running.");
+      console.error("Raw Server Response:", text);
+      return;
+    }
+
+    // 3. Handle success or explicit backend rejection
     if(data.success) {
       localStorage.setItem('sms_token', data.token);
       document.getElementById('authOverlay').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       await loadApp();
-    } else alert(data.message);
-  } catch(e) { alert("Server connection failed."); }
+    } else {
+      alert("Login Rejected: " + data.message); // E.g., "Invalid credentials"
+    }
+
+  } catch(e) { 
+    alert("Network Error: Could not connect to the backend server. " + e.message); 
+  }
 }
 
 function logout() { localStorage.removeItem('sms_token'); location.reload(); }
@@ -49,19 +78,31 @@ async function loadApp() {
   state.user = JSON.parse(atob(token.split('.')[1]));
   
   if(state.user.role === 'admin') {
-    const res = await authFetch('/shops');
+    let res = await authFetch('/shops');
+    
+    // Auto-create a default shop if the database is completely empty
+    if (res.data.length === 0) {
+        await authFetch('/shops', {
+            method: 'POST',
+            body: JSON.stringify({ name: "My Main Shop", address: "", phone: "" })
+        });
+        res = await authFetch('/shops'); // Re-fetch the newly created shop
+    }
+
     state.shops = res.data;
+    state.shopId = state.shops[0].id;
+    
     const sel = document.getElementById('adminShopSelector');
     sel.style.display = 'block';
     sel.innerHTML = state.shops.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-    if(state.shops.length > 0) state.shopId = state.shops[0].id;
+    sel.value = state.shopId;
   } else {
     state.shopId = state.user.shop_id;
   }
   
   checkPermissions();
   await fetchData();
-  showSection('pos'); // Default to POS for staff efficiency
+  showSection('pos'); 
 }
 
 async function changeActiveShop(id) { state.shopId = id; await fetchData(); showSection(currentSection); }
