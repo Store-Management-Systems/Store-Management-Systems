@@ -2105,22 +2105,165 @@ async function openUsersModal() {
     const users = usersRes.data || [];
     const allPerms = permsRes.data || [];
 
-    showModal('👥 Manage Users & RBAC', `
-      <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateUserModal('${allPerms.join(',')}')">➕ Add New User</button>
-      <div style="max-height:300px;overflow-y:auto;">
-        ${users.map(u => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
-            <div>
-              <div style="font-weight:700;">${u.name} (@${u.username})</div>
-              <div style="font-size:11px;color:var(--text-muted);">Role: <strong>${u.role}</strong> · Shop: ${u.shop_name || u.shop_id}</div>
+    showModal('👥 Manage Users & Staff Accounts', `
+      <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateUserModal('${allPerms.join(',')}')">➕ Add New User / Staff</button>
+      <div style="max-height:360px;overflow-y:auto;">
+        ${users.length === 0 ? '<p style="text-align:center;padding:20px;">No user accounts found</p>' :
+          users.map(u => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--border-light);border-radius:10px;margin-bottom:10px;background:#ffffff;">
+              <div>
+                <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${u.name} (@${u.username})</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                  Role: <strong style="color:var(--ios-blue);">${u.role}</strong> ${u.shop_name ? `· Branch: ${u.shop_name}` : ''} ${u.phone ? `· 📞 ${u.phone}` : ''}
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}">${u.status}</span>
+                <button class="btn-sm btn-secondary" onclick="openEditUserModal('${u.id}', '${allPerms.join(',')}')" title="Edit User">✏ Edit</button>
+                <button class="btn-sm btn-accent" onclick="openResetPasswordModal('${u.id}', '${u.username}')" title="Reset Password">🔑 Password</button>
+                ${u.id !== currentUser.id && u.username !== 'admin' ? `
+                  <button class="btn-sm btn-danger" onclick="deleteUserSubmit('${u.id}', '${u.username}')" title="Disable User Account">🗑</button>
+                ` : ''}
+              </div>
             </div>
-            <span class="badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}">${u.status}</span>
-          </div>
-        `).join('')}
+          `).join('')
+        }
       </div>
     `);
   } catch (e) {
     alert('Failed to load users: ' + e.message);
+  }
+}
+
+async function openEditUserModal(id, permsCsv) {
+  try {
+    const res = await apiFetch(`/users/${id}`);
+    if (!res.success || !res.data) { alert('User details not found'); return; }
+
+    const u = res.data;
+    const allPerms = permsCsv ? permsCsv.split(',') : [];
+    const userPerms = Array.isArray(u.permissions) ? u.permissions : [];
+
+    showModal(`Edit User: ${u.name} (@${u.username})`, `
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input type="text" id="editUName" value="${u.name || ''}">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" id="editUPhone" value="${u.phone || ''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="editUEmail" value="${u.email || ''}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select id="editURole">
+            ${['Owner', 'Manager', 'Cashier', 'Purchase Staff', 'Accountant', 'Staff'].map(r => `<option ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Account Status</label>
+          <select id="editUStatus">
+            <option value="active" ${u.status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="disabled" ${u.status === 'disabled' ? 'selected' : ''}>Disabled</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Role Permissions (RBAC Checkboxes)</label>
+        <div class="perm-grid">
+          ${allPerms.map(p => `
+            <label class="perm-item">
+              <input type="checkbox" name="editUPerm" value="${p}" ${userPerms.includes(p) ? 'checked' : ''}> ${p}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;margin-top:14px;" onclick="updateUserSubmit('${id}')">💾 Save Changes</button>
+    `);
+  } catch (err) {
+    alert(err.message || 'Failed to load user details');
+  }
+}
+
+async function updateUserSubmit(id) {
+  const name = document.getElementById('editUName').value.trim();
+  const phone = document.getElementById('editUPhone').value.trim();
+  const email = document.getElementById('editUEmail').value.trim();
+  const role = document.getElementById('editURole').value;
+  const status = document.getElementById('editUStatus').value;
+
+  const checkboxes = document.querySelectorAll('input[name="editUPerm"]:checked');
+  const permissions = Array.from(checkboxes).map(c => c.value);
+
+  if (!name) { alert('Name is required'); return; }
+
+  try {
+    const res = await apiFetch(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, phone, email, role, status, permissions })
+    });
+
+    if (res.success) {
+      toast('✅ User details updated');
+      openUsersModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to update user');
+  }
+}
+
+function openResetPasswordModal(id, username) {
+  showModal(`🔑 Reset Password: @${username}`, `
+    <div class="form-group">
+      <label class="form-label">New Password *</label>
+      <input type="password" id="resetNewPassword" placeholder="Minimum 4 characters">
+    </div>
+    <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="resetPasswordSubmit('${id}')">🔐 Confirm Password Reset</button>
+  `);
+}
+
+async function resetPasswordSubmit(id) {
+  const newPassword = document.getElementById('resetNewPassword').value;
+  if (!newPassword || newPassword.length < 4) {
+    alert('Password must be at least 4 characters long');
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword })
+    });
+
+    if (res.success) {
+      toast('🔑 Password reset successfully');
+      openUsersModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to reset password');
+  }
+}
+
+async function deleteUserSubmit(id, username) {
+  if (!confirm(`Are you sure you want to disable account @${username}?`)) return;
+
+  try {
+    const res = await apiFetch(`/users/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      toast(`User @${username} disabled`);
+      openUsersModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to disable user');
   }
 }
 
@@ -2189,8 +2332,8 @@ async function createUserSubmit() {
     });
 
     if (res.success) {
-      closeModal();
       toast('✅ User created');
+      openUsersModal();
     }
   } catch (err) {
     alert(err.message || 'Failed to create user');
