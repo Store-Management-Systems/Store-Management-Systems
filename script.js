@@ -1237,20 +1237,55 @@ async function openShopsModal() {
 
     showModal('🏪 Multi-Shop Architecture', `
       <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateShopModal()">➕ Add New Shop Branch</button>
-      <div style="max-height:300px;overflow-y:auto;">
+      <div style="max-height:320px;overflow-y:auto;">
         ${shops.map(s => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff;">
             <div>
-              <div style="font-weight:700;">${s.shop_name} (${s.shop_code})</div>
-              <div style="font-size:11px;color:var(--text-muted);">${s.address || 'No address'} · Currency: ${s.currency}</div>
+              <div style="font-weight:700;font-size:14px;">${s.shop_name} <span style="font-size:12px;color:var(--text-muted);">(${s.shop_code})</span></div>
+              <div style="font-size:11px;color:var(--text-muted);">${s.address || 'Main Branch'} · Currency: ${s.currency}</div>
             </div>
-            <span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}">${s.status}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="badge ${s.status === 'active' ? 'badge-success' : 'badge-danger'}" onclick="toggleShopStatusSubmit('${s.id}')" style="cursor:pointer;" title="Click to toggle status">${s.status}</span>
+              ${s.id !== 'shop_default_hq' ? `<button class="btn-sm btn-danger" style="padding:4px 8px;" onclick="deleteShopSubmit('${s.id}')" title="Delete Shop">🗑</button>` : ''}
+            </div>
           </div>
         `).join('')}
       </div>
     `);
   } catch (e) {
     alert(e.message);
+  }
+}
+
+async function deleteShopSubmit(id) {
+  if (id === 'shop_default_hq') {
+    alert('The default main headquarters shop cannot be deleted.');
+    return;
+  }
+  if (!confirm('Are you sure you want to delete this shop branch?')) return;
+
+  try {
+    const res = await apiFetch(`/shops/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      toast('🗑 Shop deleted');
+      await loadAdminShops();
+      openShopsModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to delete shop');
+  }
+}
+
+async function toggleShopStatusSubmit(id) {
+  try {
+    const res = await apiFetch(`/shops/${id}/status`, { method: 'PATCH' });
+    if (res.success) {
+      toast('Shop status updated');
+      await loadAdminShops();
+      openShopsModal();
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to update status');
   }
 }
 

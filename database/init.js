@@ -37,6 +37,8 @@ function initDatabase() {
     addColumn('shops', 'logo', 'TEXT');
     addColumn('shops', 'low_stock_alert', 'INTEGER DEFAULT 5');
     addColumn('shops', 'status', 'TEXT DEFAULT "active"');
+    addColumn('shops', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+    addColumn('shops', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Users
     addColumn('users', 'name', 'TEXT DEFAULT "User"');
@@ -47,6 +49,8 @@ function initDatabase() {
     addColumn('users', 'permissions', 'TEXT DEFAULT "[]"');
     addColumn('users', 'status', 'TEXT DEFAULT "active"');
     addColumn('users', 'phone', 'TEXT');
+    addColumn('users', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+    addColumn('users', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Items
     addColumn('items', 'shop_id', 'TEXT DEFAULT "shop_default_hq"');
@@ -54,6 +58,8 @@ function initDatabase() {
     addColumn('items', 'selling_price', 'REAL DEFAULT 0');
     addColumn('items', 'stock', 'REAL DEFAULT 0');
     addColumn('items', 'status', 'TEXT DEFAULT "active"');
+    addColumn('items', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+    addColumn('items', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Bills
     addColumn('bills', 'shop_id', 'TEXT DEFAULT "shop_default_hq"');
@@ -67,6 +73,7 @@ function initDatabase() {
     addColumn('bills', 'total', 'REAL DEFAULT 0');
     addColumn('bills', 'payment_mode', 'TEXT DEFAULT "Cash"');
     addColumn('bills', 'status', 'TEXT DEFAULT "Completed"');
+    addColumn('bills', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Stock Logs
     addColumn('stock_logs', 'shop_id', 'TEXT DEFAULT "shop_default_hq"');
@@ -77,6 +84,7 @@ function initDatabase() {
     addColumn('stock_logs', 'reason', 'TEXT');
     addColumn('stock_logs', 'supplier', 'TEXT');
     addColumn('stock_logs', 'notes', 'TEXT');
+    addColumn('stock_logs', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Customers
     addColumn('customers', 'shop_id', 'TEXT DEFAULT "shop_default_hq"');
@@ -86,6 +94,7 @@ function initDatabase() {
     addColumn('customers', 'gst', 'TEXT');
     addColumn('customers', 'birthday', 'TEXT');
     addColumn('customers', 'notes', 'TEXT');
+    addColumn('customers', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Categories & Units
     addColumn('categories', 'shop_id', 'TEXT DEFAULT "shop_default_hq"');
@@ -102,6 +111,7 @@ function initDatabase() {
     addColumn('settings', 'tax_rate', 'REAL DEFAULT 0');
     addColumn('settings', 'logo', 'TEXT');
     addColumn('settings', 'low_stock_alert', 'INTEGER DEFAULT 5');
+    addColumn('settings', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
     // Handle backwards compatibility for old table column names
     try {

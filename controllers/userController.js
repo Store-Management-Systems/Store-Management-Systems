@@ -78,7 +78,6 @@ const createUser = (req, res) => {
         try { permsArray = JSON.parse(permissions); } catch (e) { permsArray = []; }
     }
     if (!Array.isArray(permsArray)) {
-        // Default role permissions preset
         if (role === 'Owner' || role === 'Admin') {
             permsArray = ['Dashboard', 'Inventory', 'Billing', 'Reports', 'Customers', 'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item', 'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users', 'Financial Reports', 'Categories', 'Units', 'History'];
         } else if (role === 'Manager') {
@@ -90,21 +89,41 @@ const createUser = (req, res) => {
         }
     }
 
-    db.prepare(`
-        INSERT INTO users (id, name, username, email, password, role, shop_id, permissions, status, phone)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-        userId,
-        name,
-        username,
-        email || null,
-        hashedPassword,
-        role,
-        assignedShopId,
-        JSON.stringify(permsArray),
-        'active',
-        phone || null
-    );
+    const userCols = db.prepare(`PRAGMA table_info(users)`).all();
+    if (userCols.some(col => col.name === 'password_hash')) {
+        db.prepare(`
+            INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, permissions, status, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            userId,
+            name,
+            username,
+            email || null,
+            hashedPassword,
+            hashedPassword,
+            role,
+            assignedShopId,
+            JSON.stringify(permsArray),
+            'active',
+            phone || null
+        );
+    } else {
+        db.prepare(`
+            INSERT INTO users (id, name, username, email, password, role, shop_id, permissions, status, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            userId,
+            name,
+            username,
+            email || null,
+            hashedPassword,
+            role,
+            assignedShopId,
+            JSON.stringify(permsArray),
+            'active',
+            phone || null
+        );
+    }
 
     logAudit(assignedShopId, req.user.id, 'Create User', `Created user '${username}' with role '${role}'`);
 
@@ -164,7 +183,12 @@ const resetPassword = (req, res) => {
     }
 
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
-    db.prepare(`UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hashedPassword, id);
+    const userCols = db.prepare(`PRAGMA table_info(users)`).all();
+    if (userCols.some(col => col.name === 'password_hash')) {
+        db.prepare(`UPDATE users SET password = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hashedPassword, hashedPassword, id);
+    } else {
+        db.prepare(`UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hashedPassword, id);
+    }
 
     logAudit(user.shop_id, req.user.id, 'Reset Password', `Reset password for user ${user.username}`);
     return success(res, `Password reset successfully for user ${user.username}`);
