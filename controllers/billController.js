@@ -6,7 +6,43 @@ const { logAudit } = require('../services/auditService');
 const getBills = async (req, res) => {
     try {
         const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
-        const bills = await db.prepare(`SELECT * FROM bills WHERE shop_id = ? ORDER BY created_at DESC`).all(targetShop);
+        const { search, status, payment_status, range, startDate, endDate } = req.query;
+
+        let sql = `SELECT * FROM bills WHERE shop_id = ?`;
+        const params = [targetShop];
+
+        if (search) {
+            sql += ` AND (LOWER(bill_number) LIKE ? OR LOWER(customer_name) LIKE ? OR LOWER(customer_phone) LIKE ?)`;
+            const s = `%${search.toLowerCase()}%`;
+            params.push(s, s, s);
+        }
+
+        if (status) {
+            sql += ` AND status = ?`;
+            params.push(status);
+        }
+
+        if (payment_status) {
+            sql += ` AND payment_status = ?`;
+            params.push(payment_status);
+        }
+
+        if (range === 'today') {
+            sql += ` AND created_at >= CURRENT_DATE`;
+        } else if (range === 'yesterday') {
+            sql += ` AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AND created_at < CURRENT_DATE`;
+        } else if (range === '7days') {
+            sql += ` AND created_at >= (CURRENT_DATE - INTERVAL '7 days')`;
+        } else if (range === '30days') {
+            sql += ` AND created_at >= (CURRENT_DATE - INTERVAL '30 days')`;
+        } else if (startDate && endDate) {
+            sql += ` AND created_at >= ? AND created_at <= ?`;
+            params.push(startDate, endDate);
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT 200`;
+
+        const bills = await db.prepare(sql).all(params);
         return success(res, 'Bills retrieved', bills);
     } catch (err) {
         return error(res, err.message, 500);
@@ -22,7 +58,43 @@ const getBillById = async (req, res) => {
         }
 
         const items = await db.prepare(`SELECT * FROM bill_items WHERE bill_id = ?`).all(id);
-        return success(res, 'Bill details retrieved', { ...bill, items });
+        let cashier = null;
+        if (bill.user_id) {
+            cashier = await db.prepare(`SELECT name, username FROM users WHERE id = ?`).get(bill.user_id);
+        }
+
+        return success(res, 'Bill details retrieved', { ...bill, items, cashier_name: cashier ? cashier.name : 'Store Staff' });
+    } catch (err) {
+        return error(res, err.message, 500);
+    }
+};
+
+const getBillStats = async (req, res) => {
+    try {
+        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
+
+        const todaySalesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
+        const totalBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ?`).get(targetShop);
+        const paidBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND payment_status = 'Paid' AND status != 'Cancelled'`).get(targetShop);
+        const creditBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND (payment_status = 'Unpaid' OR payment_status = 'Partially Paid') AND status != 'Cancelled'`).get(targetShop);
+        const cancelledBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Cancelled'`).get(targetShop);
+        const draftBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Draft'`).get(targetShop);
+        const totalRevenueRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop);
+
+        const totalRevenue = parseFloat(totalRevenueRes?.sum || 0);
+        const validBillsCount = parseInt(totalBillsRes?.count || 0) - parseInt(cancelledBillsRes?.count || 0);
+        const avgBillValue = validBillsCount > 0 ? (totalRevenue / validBillsCount) : 0;
+
+        return success(res, 'Billing statistics retrieved', {
+            todaySales: parseFloat(todaySalesRes?.sum || 0),
+            totalBills: parseInt(totalBillsRes?.count || 0),
+            paidBills: parseInt(paidBillsRes?.count || 0),
+            creditBills: parseInt(creditBillsRes?.count || 0),
+            cancelledBills: parseInt(cancelledBillsRes?.count || 0),
+            draftBills: parseInt(draftBillsRes?.count || 0),
+            totalRevenue,
+            avgBillValue
+        });
     } catch (err) {
         return error(res, err.message, 500);
     }
@@ -53,7 +125,6 @@ const createBill = async (req, res) => {
     const calcDiscount = parseFloat(discount) || 0;
     const calcTotal = parseFloat(total) || (calcSubtotal + calcTax - calcDiscount);
 
-    // Initial payment tracking: default to full payment if not specified
     const paid = paidAmount !== undefined ? parseFloat(paidAmount) : calcTotal;
     const due = Math.max(0, calcTotal - paid);
 
@@ -70,12 +141,10 @@ const createBill = async (req, res) => {
             selectedPerson = await db.prepare(`SELECT * FROM people WHERE mobile = ? AND shop_id = ? AND status != 'Deleted'`).get(customerPhone, activeShop);
         }
 
-        // B2B Credit Limit Check for Parties
         if (selectedPerson && selectedPerson.category === 'Party' && due > 0) {
             const creditLimit = parseFloat(selectedPerson.credit_limit || 0);
             if (creditLimit > 0) {
-                // Calculate current due
-                const salesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE person_id = ?`).get(selectedPerson.id);
+                const salesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE person_id = ? AND status != 'Cancelled'`).get(selectedPerson.id);
                 const payRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE person_id = ? AND type = 'in'`).get(selectedPerson.id);
                 const currentDue = (parseFloat(salesRes?.sum || 0) - parseFloat(payRes?.sum || 0)) + parseFloat(selectedPerson.opening_balance || 0);
 
@@ -85,7 +154,6 @@ const createBill = async (req, res) => {
             }
         }
 
-        // Stock Availability & Integrity Check
         for (const cartItem of items) {
             const itemId = cartItem.itemId || cartItem.item_id || cartItem.id;
             const requestedQty = parseFloat(cartItem.qty);
@@ -101,7 +169,6 @@ const createBill = async (req, res) => {
             }
         }
 
-        // Generate Sequenced Bill Number
         const countRes = await db.prepare(`SELECT COUNT(*) as cnt FROM bills WHERE shop_id = ?`).get(activeShop);
         const billNoSeq = (parseInt(countRes?.cnt || 0) + 1).toString().padStart(6, '0');
         const billId = 'bill_' + uuidv4().substring(0, 8);
@@ -110,18 +177,16 @@ const createBill = async (req, res) => {
         const targetName = selectedPerson ? (selectedPerson.business_name || selectedPerson.name) : customerName;
         const targetPhone = selectedPerson ? selectedPerson.mobile : customerPhone;
 
-        // 1. Insert Bill Record
         await db.prepare(`
             INSERT INTO bills (
                 id, shop_id, user_id, person_id, bill_number, customer_name, customer_phone,
-                subtotal, tax, discount, total, paid_amount, due_amount, payment_status, payment_mode, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Completed')
+                subtotal, tax, discount, total, paid_amount, due_amount, payment_status, payment_mode, status, remarks
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Completed', ?)
         `).run(
             billId, activeShop, req.user.id, targetPersonId, billNoSeq, targetName, targetPhone || null,
-            calcSubtotal, calcTax, calcDiscount, calcTotal, paid, due, paymentStatus, paymentMode
+            calcSubtotal, calcTax, calcDiscount, calcTotal, paid, due, paymentStatus, paymentMode, notes || null
         );
 
-        // 2. Insert Bill Items & Update Inventory Stock
         for (const cartItem of items) {
             const itemId = cartItem.itemId || cartItem.item_id || cartItem.id;
             const itemQty = parseFloat(cartItem.qty);
@@ -143,7 +208,6 @@ const createBill = async (req, res) => {
                     WHERE id = ? AND shop_id = ?
                 `).run(itemQty, itemQty, itemId, activeShop);
 
-                // Stock Out Log
                 const logId = 'log_' + uuidv4().substring(0, 8);
                 await db.prepare(`
                     INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, qty, reason, notes)
@@ -152,16 +216,13 @@ const createBill = async (req, res) => {
             }
         }
 
-        // 3. Auto post to Ledger if linked to Person
         if (targetPersonId) {
-            // Sales Invoice Debit entry (increases receivable)
             const ledgerId = 'ldg_' + uuidv4().substring(0, 8);
             await db.prepare(`
                 INSERT INTO ledgers (id, shop_id, person_id, entry_type, reference_id, debit, credit, notes)
                 VALUES (?, ?, ?, 'Sales Invoice', ?, ?, 0, ?)
             `).run(ledgerId, activeShop, targetPersonId, billId, calcTotal, `Sales Bill #${billNoSeq}`);
 
-            // Payment Received Credit entry if paid > 0
             if (paid > 0) {
                 const payId = 'pay_' + uuidv4().substring(0, 8);
                 await db.prepare(`
@@ -195,8 +256,67 @@ const createBill = async (req, res) => {
     }
 };
 
+const cancelBill = async (req, res) => {
+    const { id } = req.params;
+    const { reason = 'Customer Cancellation' } = req.body;
+    const activeShop = req.user.active_shop_id;
+
+    try {
+        const bill = await db.prepare(`SELECT * FROM bills WHERE id = ? AND shop_id = ?`).get(id, activeShop);
+        if (!bill) return error(res, 'Bill not found', 404);
+
+        if (bill.status === 'Cancelled') {
+            return error(res, 'Bill is already cancelled', 400);
+        }
+
+        await db.prepare(`
+            UPDATE bills SET
+                status = 'Cancelled',
+                cancelled_by = ?,
+                cancellation_reason = ?,
+                cancelled_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND shop_id = ?
+        `).run(req.user.id, reason, id, activeShop);
+
+        const billItems = await db.prepare(`SELECT * FROM bill_items WHERE bill_id = ?`).all(id);
+        for (const item of billItems) {
+            if (item.item_id) {
+                await db.prepare(`
+                    UPDATE items SET
+                        stock = stock + ?,
+                        qty = qty + ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND shop_id = ?
+                `).run(parseFloat(item.qty), parseFloat(item.qty), item.item_id, activeShop);
+
+                const logId = 'log_' + uuidv4().substring(0, 8);
+                await db.prepare(`
+                    INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, qty, reason, notes)
+                    VALUES (?, ?, ?, ?, ?, 'in', ?, ?, 'Bill Cancellation', ?)
+                `).run(logId, activeShop, req.user.id, item.item_id, item.item_name, parseFloat(item.qty), parseFloat(item.qty), `Restored from cancelled Bill #${bill.bill_number}`);
+            }
+        }
+
+        if (bill.person_id) {
+            const billTotal = parseFloat(bill.total || 0);
+            const ledgerId = 'ldg_' + uuidv4().substring(0, 8);
+            await db.prepare(`
+                INSERT INTO ledgers (id, shop_id, person_id, entry_type, reference_id, debit, credit, notes)
+                VALUES (?, ?, ?, 'Invoice Cancellation', ?, 0, ?, ?)
+            `).run(ledgerId, activeShop, bill.person_id, id, billTotal, `Reversal of Cancelled Bill #${bill.bill_number}`);
+        }
+
+        await logAudit(activeShop, req.user.id, 'Cancel Bill', `Cancelled Bill #${bill.bill_number} (Reason: ${reason})`);
+        return success(res, `Bill #${bill.bill_number} cancelled successfully and stock restored`);
+    } catch (err) {
+        return error(res, err.message || 'Failed to cancel bill', 500);
+    }
+};
+
 module.exports = {
     getBills,
     getBillById,
-    createBill
+    getBillStats,
+    createBill,
+    cancelBill
 };

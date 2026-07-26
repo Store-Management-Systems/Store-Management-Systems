@@ -873,10 +873,155 @@ async function renderAnalytics(c) {
 }
 
 // ─── 7. Billing Section ───────────────────────────────────────────────────────
+let billingSubTab = 'dashboard'; // 'dashboard' or 'new'
+let billingSearchQuery = '';
+let billingStatusFilter = '';
+let billingRangeFilter = '';
 let billSearchQuery = '';
 let billSelectedCat = 'All';
 
 async function renderBill(c) {
+  c.innerHTML = `
+  <div class="fade-in">
+    <div class="tabs" style="margin-bottom:14px;">
+      <button class="tab ${billingSubTab === 'dashboard' ? 'active' : ''}" onclick="billingSubTab='dashboard';renderSection('bill')">📊 Billing Dashboard</button>
+      <button class="tab ${billingSubTab === 'new' ? 'active' : ''}" onclick="billingSubTab='new';renderSection('bill')">🧾 New POS Bill</button>
+    </div>
+    <div id="billSubTabContent">⏳ Loading Billing Module...</div>
+  </div>`;
+
+  const container = document.getElementById('billSubTabContent');
+  if (billingSubTab === 'dashboard') {
+    await renderBillingDashboard(container);
+  } else {
+    await renderPOSBilling(container);
+  }
+}
+
+async function renderBillingDashboard(container) {
+  try {
+    const [statsRes, billsRes] = await Promise.all([
+      apiFetch('/bills/stats'),
+      apiFetch(`/bills?search=${encodeURIComponent(billingSearchQuery)}&payment_status=${encodeURIComponent(billingStatusFilter)}&range=${encodeURIComponent(billingRangeFilter)}`)
+    ]);
+
+    const stats = statsRes.success && statsRes.data ? statsRes.data : {
+      todaySales: 0, totalBills: 0, paidBills: 0, creditBills: 0, cancelledBills: 0, draftBills: 0, totalRevenue: 0, avgBillValue: 0
+    };
+    const bills = billsRes.success && billsRes.data ? billsRes.data : [];
+
+    container.innerHTML = `
+      <!-- Billing Metrics Cards -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4, 1fr);gap:10px;margin-bottom:16px;">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${fmtNum(stats.todaySales, 0)}</div>
+          <div class="stat-label">Today's Sales</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-blue);">${stats.totalBills}</div>
+          <div class="stat-label">Total Bills</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-indigo);">${stats.paidBills}</div>
+          <div class="stat-label">Paid Invoices</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-red);">${stats.creditBills}</div>
+          <div class="stat-label">Credit / Unpaid</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-orange, #ff9500);">${stats.draftBills}</div>
+          <div class="stat-label">Draft Bills</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--text-muted);">${stats.cancelledBills}</div>
+          <div class="stat-label">Cancelled Bills</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-purple);">${state.shop.currency}${fmtNum(stats.avgBillValue, 2)}</div>
+          <div class="stat-label">Avg Bill Value</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${fmtNum(stats.totalRevenue, 0)}</div>
+          <div class="stat-label">Total Revenue</div>
+        </div>
+      </div>
+
+      <!-- Search & Filters Bar -->
+      <div class="card" style="padding:12px;margin-bottom:14px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <div class="search-box" style="flex:2;margin-bottom:0;min-width:200px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Search Invoice #, Name, Mobile..." value="${billingSearchQuery}" oninput="billingSearchQuery=this.value;renderSection('bill')">
+          </div>
+
+          <select style="flex:1;min-width:120px;padding:8px 12px;font-size:12px;border-radius:10px;" onchange="billingStatusFilter=this.value;renderSection('bill')">
+            <option value="" ${billingStatusFilter === '' ? 'selected' : ''}>All Statuses</option>
+            <option value="Paid" ${billingStatusFilter === 'Paid' ? 'selected' : ''}>Paid</option>
+            <option value="Unpaid" ${billingStatusFilter === 'Unpaid' ? 'selected' : ''}>Unpaid</option>
+            <option value="Partially Paid" ${billingStatusFilter === 'Partially Paid' ? 'selected' : ''}>Partially Paid</option>
+          </select>
+
+          <select style="flex:1;min-width:120px;padding:8px 12px;font-size:12px;border-radius:10px;" onchange="billingRangeFilter=this.value;renderSection('bill')">
+            <option value="" ${billingRangeFilter === '' ? 'selected' : ''}>All Time</option>
+            <option value="today" ${billingRangeFilter === 'today' ? 'selected' : ''}>Today</option>
+            <option value="yesterday" ${billingRangeFilter === 'yesterday' ? 'selected' : ''}>Yesterday</option>
+            <option value="7days" ${billingRangeFilter === '7days' ? 'selected' : ''}>Last 7 Days</option>
+            <option value="30days" ${billingRangeFilter === '30days' ? 'selected' : ''}>Last 30 Days</option>
+          </select>
+
+          <button class="btn-primary" onclick="billingSubTab='new';renderSection('bill')" style="padding:10px 16px;font-size:13px;">➕ New Bill</button>
+        </div>
+      </div>
+
+      <!-- Invoices List -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent Sales Invoices (${bills.length})</h3>
+        </div>
+
+        ${bills.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No billing invoices found</p></div>' :
+          bills.map(b => `
+            <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);${b.status === 'Cancelled' ? 'opacity:0.6;' : ''}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <div style="font-weight:800;font-size:15px;">
+                    #${b.bill_number || b.billNo}
+                    <span class="badge ${b.status === 'Cancelled' ? 'badge-cancelled' : b.due_amount > 0 ? 'badge-partial' : 'badge-paid'}">${b.status === 'Cancelled' ? 'CANCELLED' : b.payment_status || 'Paid'}</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+                    ${b.customer_name || 'Walk-in Customer'} ${b.customer_phone ? '· 📞 ' + b.customer_phone : ''}
+                  </div>
+                  <div style="font-size:11px;color:var(--text-light);margin-top:2px;">
+                    ${formatDateFull(b.created_at || b.date)} · Mode: <strong>${b.payment_mode || 'Cash'}</strong>
+                    ${b.cancellation_reason ? `<br><span style="color:var(--ios-red);">Cancelled: ${b.cancellation_reason}</span>` : ''}
+                  </div>
+                </div>
+
+                <div style="text-align:right;">
+                  <div style="font-size:18px;font-weight:800;color:var(--brown);">${state.shop.currency}${fmtNum(b.total, 2)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);">Paid: ${state.shop.currency}${fmtNum(b.paid_amount || b.total, 2)} ${b.due_amount > 0 ? `· <span style="color:var(--ios-red);">Due: ${state.shop.currency}${fmtNum(b.due_amount, 2)}</span>` : ''}</div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;border-top:1px solid var(--border-light);padding-top:8px;">
+                <button class="btn-sm btn-secondary" onclick="viewBill('${b.id}')">👁 View</button>
+                <button class="btn-sm btn-accent" onclick="openA4InvoicePrint('${b.id}')">📄 A4 Print</button>
+                <button class="btn-sm btn-success" style="background:#25D366;color:#fff;border:none;" onclick="shareBillWhatsApp('${b.id}')">📱 WhatsApp</button>
+                <button class="btn-sm btn-secondary" onclick="duplicateBill('${b.id}')">📋 Duplicate</button>
+                ${b.status !== 'Cancelled' ? `<button class="btn-sm btn-danger" onclick="cancelBillSubmit('${b.id}')">❌ Cancel</button>` : ''}
+              </div>
+            </div>
+          `).join('')
+        }
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-warn">Failed to load billing dashboard: ${err.message}</div>`;
+  }
+}
+
+async function renderPOSBilling(c) {
   try {
     const res = await apiFetch('/items');
     if (res.success) state.items = res.data || [];
@@ -941,7 +1086,7 @@ async function renderBill(c) {
                 <div class="stock-icon">📦</div>
                 <div class="bill-item-info">
                   <div class="bill-item-name">${i.name}</div>
-                  <div class="bill-item-meta">${state.shop.currency}${(i.selling_price || i.price || 0).toFixed(2)} / ${i.unit} · Stock: ${i.stock}</div>
+                  <div class="bill-item-meta">${state.shop.currency}${fmtNum(i.selling_price || i.price, 2)} / ${i.unit} · Stock: ${i.stock}</div>
                 </div>
 
                 <div class="qty-stepper">
@@ -971,22 +1116,187 @@ async function renderBill(c) {
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;">
             <div>
               <span style="font-weight:600;">${item.name}</span>
-              <span style="font-size:11px;color:var(--text-muted);"> (${item.qty} x ${state.shop.currency}${item.price.toFixed(2)})</span>
+              <span style="font-size:11px;color:var(--text-muted);"> (${item.qty} x ${state.shop.currency}${fmtNum(item.price, 2)})</span>
             </div>
-            <div style="font-weight:700;">${state.shop.currency}${(item.qty * item.price).toFixed(2)}</div>
+            <div style="font-weight:700;">${state.shop.currency}${fmtNum(item.qty * item.price, 2)}</div>
           </div>
         `).join('')}
       </div>
 
       <div class="bill-summary">
-        <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${subtotal.toFixed(2)}</span></div>
-        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${tax.toFixed(2)}</span></div>` : ''}
-        <div class="summary-row summary-total"><span>Total Payable</span><span>${state.shop.currency}${total.toFixed(2)}</span></div>
+        <div class="summary-row"><span>Subtotal</span><span>${state.shop.currency}${fmtNum(subtotal, 2)}</span></div>
+        ${state.shop.taxRate > 0 ? `<div class="summary-row"><span>Tax (${state.shop.taxRate}%)</span><span>${state.shop.currency}${fmtNum(tax, 2)}</span></div>` : ''}
+        <div class="summary-row summary-total"><span>Total Payable</span><span>${state.shop.currency}${fmtNum(total, 2)}</span></div>
       </div>
 
       <button class="btn-primary" style="width:100%;margin-top:14px;padding:14px;font-size:16px;" onclick="generateBillSubmit()">🧾 Complete & Print Bill</button>
     </div>` : ''}
   </div>`;
+}
+
+async function openA4InvoicePrint(id) {
+  try {
+    const res = await apiFetch(`/bills/${id}`);
+    if (!res.success || !res.data) { alert('Invoice details not found'); return; }
+
+    const b = res.data;
+    const s = state.shop;
+    const dt = new Date(b.created_at || Date.now());
+    const dateStr = dt.toLocaleDateString('en-IN');
+    const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const items = b.items || [];
+
+    const a4Html = `
+      <div class="a4-invoice">
+        <div class="a4-header">
+          <div class="a4-brand">
+            <h1>${s.name.toUpperCase()}</h1>
+            <p style="font-weight:600;color:#475569;">Quality & Freshness Guaranteed</p>
+            <p>${s.address || 'Main Commercial Street'}</p>
+            <p>Phone: ${s.phone || 'N/A'} | Email: support@${s.name.toLowerCase().replace(/\s+/g, '')}.com</p>
+            ${s.gst ? `<p><strong>GSTIN: ${s.gst}</strong></p>` : ''}
+          </div>
+          <div class="a4-meta">
+            <h2>TAX INVOICE</h2>
+            <p><strong>Invoice No:</strong> #${b.bill_number}</p>
+            <p><strong>Date:</strong> ${dateStr} ${timeStr}</p>
+            <p><strong>Payment Mode:</strong> ${b.payment_mode || 'Cash'}</p>
+            <p><strong>Cashier:</strong> ${b.cashier_name || 'Staff'}</p>
+          </div>
+        </div>
+
+        <div class="a4-info-grid">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">BILLED TO:</div>
+            <div style="font-size:15px;font-weight:800;color:#0f172a;margin-top:2px;">${b.customer_name || 'Walk-in Customer'}</div>
+            <div style="color:#475569;">📞 Mobile: ${b.customer_phone || 'N/A'}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">INVOICE STATUS:</div>
+            <div style="font-size:16px;font-weight:800;color:${b.status === 'Cancelled' ? '#94a3b8' : b.due_amount > 0 ? '#ef4444' : '#10b981'};margin-top:2px;">
+              ${b.status === 'Cancelled' ? 'CANCELLED' : b.payment_status || 'PAID'}
+            </div>
+          </div>
+        </div>
+
+        <table class="a4-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Product Description</th>
+              <th style="text-align:center;">Qty</th>
+              <th style="text-align:right;">Rate (${s.currency})</th>
+              <th style="text-align:right;">Total (${s.currency})</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((i, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${i.item_name}</strong></td>
+                <td style="text-align:center;">${i.qty}</td>
+                <td style="text-align:right;">${fmtNum(i.price, 2)}</td>
+                <td style="text-align:right;font-weight:700;">${fmtNum(i.total, 2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="a4-summary">
+          <div style="max-width:300px;font-size:11px;color:#64748b;">
+            <strong>Terms & Conditions:</strong><br>
+            1. Goods once sold cannot be returned or exchanged.<br>
+            2. All disputes subject to local jurisdiction.<br>
+            3. Computer generated invoice — no signature required.
+          </div>
+
+          <div class="a4-total-box">
+            <div class="a4-total-row"><span>Subtotal</span><span>${s.currency}${fmtNum(b.subtotal, 2)}</span></div>
+            ${b.tax > 0 ? `<div class="a4-total-row"><span>Tax</span><span>${s.currency}${fmtNum(b.tax, 2)}</span></div>` : ''}
+            ${b.discount > 0 ? `<div class="a4-total-row"><span>Discount</span><span>-${s.currency}${fmtNum(b.discount, 2)}</span></div>` : ''}
+            <div class="a4-total-row grand"><span>Grand Total</span><span>${s.currency}${fmtNum(b.total, 2)}</span></div>
+            <div class="a4-total-row"><span>Amount Paid</span><span>${s.currency}${fmtNum(b.paid_amount || b.total, 2)}</span></div>
+            ${b.due_amount > 0 ? `<div class="a4-total-row" style="color:#ef4444;font-weight:700;"><span>Balance Due</span><span>${s.currency}${fmtNum(b.due_amount, 2)}</span></div>` : ''}
+          </div>
+        </div>
+
+        <div class="a4-footer">
+          <div>Customer Signature</div>
+          <div>Authorized Signatory (${s.name})</div>
+        </div>
+      </div>
+    `;
+
+    const pa = document.getElementById('printArea');
+    pa.innerHTML = a4Html;
+    pa.style.display = 'block';
+    window.print();
+    pa.style.display = 'none';
+  } catch (e) {
+    alert(e.message || 'Failed to generate A4 invoice print');
+  }
+}
+
+async function shareBillWhatsApp(id) {
+  try {
+    const res = await apiFetch(`/bills/${id}`);
+    if (!res.success || !res.data) { alert('Bill details not found'); return; }
+
+    const b = res.data;
+    const s = state.shop;
+    const items = b.items || [];
+    const phone = (b.customer_phone || '').replace(/\D/g, '');
+
+    const text = `🧾 *TAX INVOICE - ${s.name.toUpperCase()}*\nBranch: ${s.name}\nInvoice #: ${b.bill_number}\nCustomer: ${b.customer_name || 'Walk-in'}\nDate: ${formatDateFull(b.created_at)}\n-------------------\n${items.map((i, idx) => `${idx + 1}. ${i.item_name} (x${i.qty}): ${s.currency}${fmtNum(i.total, 2)}`).join('\n')}\n-------------------\nSubtotal: ${s.currency}${fmtNum(b.subtotal, 2)}\n*Grand Total: ${s.currency}${fmtNum(b.total, 2)}*\nAmount Paid: ${s.currency}${fmtNum(b.paid_amount || b.total, 2)}\nStatus: ${b.payment_status || 'Paid'}\n\nThank you for shopping with us! 🙏`;
+
+    const targetUrl = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(targetUrl, '_blank');
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function cancelBillSubmit(id) {
+  const reason = prompt("Please enter a reason for cancelling this bill:", "Customer Cancellation");
+  if (reason === null) return;
+
+  try {
+    const res = await apiFetch(`/bills/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason.trim() || 'Customer Cancellation' })
+    });
+
+    if (res.success) {
+      toast('❌ Bill cancelled and stock restored');
+      renderSection('bill');
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to cancel bill');
+  }
+}
+
+async function duplicateBill(id) {
+  try {
+    const res = await apiFetch(`/bills/${id}`);
+    if (!res.success || !res.data) return;
+
+    const b = res.data;
+    billCart = (b.items || []).map(i => ({
+      itemId: i.item_id,
+      name: i.item_name,
+      price: parseFloat(i.price),
+      qty: parseFloat(i.qty),
+      stock: 999,
+      unit: 'Pcs'
+    }));
+
+    billCustomer = { personId: b.person_id || null, name: b.customer_name || '', phone: b.customer_phone || '' };
+    billingSubTab = 'new';
+    renderSection('bill');
+    toast('📋 Bill items duplicated to new order');
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function handleBillPartySelect(personId) {
@@ -1671,6 +1981,28 @@ async function renderSettings(c) {
       </div>
     </div>
 
+    <!-- Enterprise Management Cards -->
+    <div class="card">
+      <h3 style="margin-bottom:12px;">🏢 Branch & Enterprise Administration</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button class="btn-secondary" style="padding:12px;" onclick="openBranchManagerModal()">🏢 Manage Branches</button>
+        <button class="btn-secondary" style="padding:12px;" onclick="openRoleManagerModal()">🔑 Manage Roles & RBAC</button>
+        <button class="btn-secondary" style="padding:12px;" onclick="openStaffManagerModal()">👥 Staff & Users</button>
+        <button class="btn-secondary" style="padding:12px;" onclick="openAuditLogsModal()">📋 System Audit Logs</button>
+      </div>
+    </div>
+
+    ${currentUser && currentUser.role === 'Admin' ? `
+    <!-- Super Admin Danger Zone -->
+    <div class="card" style="border:1px solid rgba(255, 59, 48, 0.3);background:rgba(255, 59, 48, 0.03);">
+      <h3 style="color:var(--ios-red);margin-bottom:12px;">🚨 Super Admin Danger Zone & Backups</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button class="btn-secondary" style="padding:12px;" onclick="downloadBackup()">💾 Backup Database</button>
+        <button class="btn-secondary" style="padding:12px;" onclick="openRestoreModal()">📥 Restore Database</button>
+      </div>
+      <button class="btn-danger" style="width:100%;margin-top:12px;padding:12px;" onclick="openDeleteAllDataModal()">⚠️ Delete All Data (Requires 3 Passwords)</button>
+    </div>` : ''}
+
     <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="saveSettingsSubmit()">💾 Save All Settings</button>
   </div>`;
 }
@@ -1981,6 +2313,189 @@ async function createShopSubmit() {
     alert(e.message);
   }
 }
+
+// ─── Super Admin Controls & Danger Zone ────────────────────────────────────────
+async function downloadBackup() {
+  try {
+    const res = await apiFetch('/admin/backup');
+    if (res.success && res.data) {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(res.data, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `SMS_Backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast('💾 Database backup downloaded successfully');
+    }
+  } catch (err) {
+    alert('Failed to generate backup: ' + err.message);
+  }
+}
+
+function openRestoreModal() {
+  showModal('📥 Restore Database Backup', `
+    <div class="form-group">
+      <label class="form-label">Select JSON Backup File</label>
+      <input type="file" id="restoreFile" accept=".json">
+    </div>
+    <div class="alert alert-warn" style="margin-top:10px;">
+      ⚠️ Warning: Restoring database will replace all current inventory, customer, bill, and transaction records!
+    </div>
+    <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="executeRestoreSubmit()">📥 Confirm Restore</button>
+  `);
+}
+
+async function executeRestoreSubmit() {
+  const fileInput = document.getElementById('restoreFile');
+  if (!fileInput.files || !fileInput.files[0]) { alert('Please select a backup JSON file'); return; }
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const backupJson = JSON.parse(e.target.result);
+      const res = await apiFetch('/admin/restore', {
+        method: 'POST',
+        body: JSON.stringify({ backup: backupJson })
+      });
+      if (res.success) {
+        closeModal();
+        toast('✅ Database restored successfully');
+        await loadInitialData();
+        renderSection('dashboard');
+      }
+    } catch (err) {
+      alert('Restore failed: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function openAuditLogsModal() {
+  try {
+    const res = await apiFetch('/admin/audit-logs');
+    if (!res.success || !res.data) return;
+
+    const logs = res.data;
+    showModal('📋 System Audit Logs', `
+      <div style="max-height:380px;overflow-y:auto;">
+        ${logs.length === 0 ? '<p style="text-align:center;padding:20px;">No audit logs recorded yet</p>' :
+          logs.map(l => `
+            <div class="log-entry" style="font-size:12px;margin-bottom:8px;">
+              <div style="font-weight:700;color:var(--text-primary);">${l.action} <span style="font-weight:400;color:var(--text-muted);">by ${l.user_name || l.username || 'System'}</span></div>
+              <div style="color:var(--text-secondary);margin-top:2px;">${l.details || ''}</div>
+              <div style="font-size:10px;color:var(--text-light);margin-top:2px;">${formatDateFull(l.created_at)}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+    `);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+// ─── 3-Step Password Guarded Delete All Data ─────────────────────────────────
+let delPass1 = '', delPass2 = '', delPass3 = '';
+
+function openDeleteAllDataModal() {
+  delPass1 = ''; delPass2 = ''; delPass3 = '';
+  showModal('🚨 Delete All Data — Step 1 of 4 (Password Pass 1)', `
+    <div class="alert alert-warn">
+      ⚠️ CRITICAL WARNING: You are about to initiate complete deletion of all store invoices, inventory, stock logs, customers, suppliers, and accounting ledgers!
+    </div>
+    <div class="form-group">
+      <label class="form-label">Enter Super Admin Password (Pass 1/3) *</label>
+      <input type="password" id="delPassInput1" placeholder="••••••••" autofocus>
+    </div>
+    <button class="btn-danger" style="width:100%;margin-top:10px;" onclick="submitDeleteAllDataPass1()">Proceed to Pass 2 ➔</button>
+  `);
+}
+
+function submitDeleteAllDataPass1() {
+  const p = document.getElementById('delPassInput1').value;
+  if (!p) { alert('Password is required'); return; }
+  delPass1 = p;
+
+  showModal('🚨 Delete All Data — Step 2 of 4 (Password Pass 2)', `
+    <div class="alert alert-warn">
+      ⚠️ SECOND CONFIRMATION: Are you 100% sure? All transactions, sales bills, and customer due balances will be wiped out permanently!
+    </div>
+    <div class="form-group">
+      <label class="form-label">Re-enter Super Admin Password (Pass 2/3) *</label>
+      <input type="password" id="delPassInput2" placeholder="••••••••" autofocus>
+    </div>
+    <button class="btn-danger" style="width:100%;margin-top:10px;" onclick="submitDeleteAllDataPass2()">Proceed to Pass 3 ➔</button>
+  `);
+}
+
+function submitDeleteAllDataPass2() {
+  const p = document.getElementById('delPassInput2').value;
+  if (!p) { alert('Password is required'); return; }
+  delPass2 = p;
+
+  showModal('🚨 Delete All Data — Step 3 of 4 (Password Pass 3)', `
+    <div class="alert alert-warn">
+      ⚠️ FINAL PASSWORD CHECK: Enter your password a third time to verify authorization.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Re-enter Super Admin Password (Pass 3/3) *</label>
+      <input type="password" id="delPassInput3" placeholder="••••••••" autofocus>
+    </div>
+    <button class="btn-danger" style="width:100%;margin-top:10px;" onclick="submitDeleteAllDataPass3()">Proceed to Phrase Check ➔</button>
+  `);
+}
+
+function submitDeleteAllDataPass3() {
+  const p = document.getElementById('delPassInput3').value;
+  if (!p) { alert('Password is required'); return; }
+  delPass3 = p;
+
+  showModal('🚨 Delete All Data — Step 4 of 4 (Confirmation Phrase)', `
+    <div class="alert alert-warn">
+      FINAL SAFETY GUARD: To execute the full data reset, type the phrase <strong style="color:var(--ios-red);">DELETE ALL DATA</strong> below.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Type phrase exactly: <strong>DELETE ALL DATA</strong></label>
+      <input type="text" id="delPhraseInput" placeholder="DELETE ALL DATA" autofocus>
+    </div>
+    <button class="btn-danger" style="width:100%;margin-top:10px;" onclick="executeDeleteAllDataFinal()">🔥 PERMANENTLY DELETE ALL DATA</button>
+  `);
+}
+
+async function executeDeleteAllDataFinal() {
+  const phrase = document.getElementById('delPhraseInput').value.trim();
+  if (phrase !== 'DELETE ALL DATA') {
+    alert("Phrase mismatch! You must type 'DELETE ALL DATA' exactly.");
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/admin/delete-all-data', {
+      method: 'POST',
+      body: JSON.stringify({
+        passwordCheck1: delPass1,
+        passwordCheck2: delPass2,
+        passwordCheck3: delPass3,
+        confirmPhrase: phrase
+      })
+    });
+
+    if (res.success) {
+      closeModal();
+      alert(res.message || 'Data reset completed successfully.');
+      await loadInitialData();
+      showSection('dashboard');
+    }
+  } catch (err) {
+    alert('Data deletion rejected: ' + err.message);
+  }
+}
+
+function openBranchManagerModal() { openShopsModal(); }
+function openRoleManagerModal() { openUsersModal(); }
+function openStaffManagerModal() { openUsersModal(); }
 
 // ─── Modal Helpers ────────────────────────────────────────────────────────────
 function showModal(title, body) {

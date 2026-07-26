@@ -263,6 +263,19 @@ async function initNeonDatabase() {
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS due_amount NUMERIC DEFAULT 0;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_status VARCHAR(30) DEFAULT 'Paid';
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_by VARCHAR(50);
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;
+            ALTER TABLE bills ADD COLUMN IF NOT EXISTS remarks TEXT;
+
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS fssai VARCHAR(50);
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS email VARCHAR(150);
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_date DATE;
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS manager VARCHAR(150);
+
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;
         `);
 
         // 2. Indexes

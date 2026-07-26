@@ -37,7 +37,11 @@ const createShop = async (req, res) => {
         shop_code,
         address,
         phone,
+        email,
         gst,
+        fssai,
+        manager,
+        opening_date,
         currency = '₹',
         tax_rate = 0,
         logo = null,
@@ -68,15 +72,17 @@ const createShop = async (req, res) => {
             ownerId = 'usr_' + uuidv4().substring(0, 8);
         }
 
-        // 1. Create Shop
         await db.prepare(`
-            INSERT INTO shops (id, name, shop_name, shop_code, owner_id, address, phone, gst, currency, tax_rate, logo, low_stock_alert, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO shops (
+                id, name, shop_name, shop_code, owner_id, address, phone, email, gst, fssai, manager, opening_date,
+                currency, tax_rate, logo, low_stock_alert, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            shopId, shop_name, shop_name, shop_code, ownerId, address || '', phone || '', gst || '', currency, parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5, 'active'
+            shopId, shop_name, shop_name, shop_code, ownerId, address || '', phone || '', email || null,
+            gst || '', fssai || null, manager || null, opening_date || null, currency,
+            parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5, 'active'
         );
 
-        // 2. Create Owner User
         if (owner_username && owner_password) {
             const hashed = bcrypt.hashSync(owner_password, 10);
             const ownerPermissions = JSON.stringify([
@@ -84,7 +90,7 @@ const createShop = async (req, res) => {
                 'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item',
                 'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users',
                 'Financial Reports', 'Categories', 'Units', 'Purchase Price',
-                'Selling Price', 'History'
+                'Selling Price', 'History', 'Parties', 'Suppliers', 'Ledgers', 'Payments', 'Purchases'
             ]);
 
             await db.prepare(`
@@ -93,13 +99,11 @@ const createShop = async (req, res) => {
             `).run(ownerId, owner_name || `${shop_name} Owner`, owner_username, hashed, hashed, 'Owner', shopId, ownerPermissions, 'active');
         }
 
-        // 3. Create Settings (11 columns = 11 placeholders)
         await db.prepare(`
             INSERT INTO settings (id, shop_id, shop_name, tagline, address, phone, gst, currency, tax_rate, logo, low_stock_alert)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run('set_' + uuidv4().substring(0, 8), shopId, shop_name, 'Quality & Excellence', address || '', phone || '', gst || '', currency, parseFloat(tax_rate) || 0, logo, parseInt(low_stock_alert) || 5);
 
-        // 4. Default Categories and Units
         const defaultCats = ['General', 'Bakery', 'Beverages', 'Snacks', 'Others'];
         for (let idx = 0; idx < defaultCats.length; idx++) {
             await db.prepare(`INSERT INTO categories (id, shop_id, name) VALUES (?, ?, ?)`).run(`cat_${shopId}_${idx}`, shopId, defaultCats[idx]);
@@ -110,8 +114,8 @@ const createShop = async (req, res) => {
             await db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(`unit_${shopId}_${idx}`, shopId, defaultUnits[idx]);
         }
 
-        await logAudit(shopId, req.user.id, 'Create Shop', `Created new shop '${shop_name}' (${shop_code})`);
-        return success(res, 'Shop created successfully', { shop_id: shopId, owner_id: ownerId }, 201);
+        await logAudit(shopId, req.user.id, 'Create Shop', `Created new shop branch '${shop_name}' (${shop_code})`);
+        return success(res, 'Shop branch created successfully', { shop_id: shopId, owner_id: ownerId }, 201);
     } catch (err) {
         return error(res, err.message || 'Failed to create shop', 400);
     }
@@ -119,7 +123,7 @@ const createShop = async (req, res) => {
 
 const updateShop = async (req, res) => {
     const { id } = req.params;
-    const { shop_name, address, phone, gst, currency, tax_rate, logo, low_stock_alert, status } = req.body;
+    const { shop_name, address, phone, email, gst, fssai, manager, opening_date, currency, tax_rate, logo, low_stock_alert, status } = req.body;
 
     try {
         const shop = await db.prepare(`SELECT * FROM shops WHERE id = ?`).get(id);
@@ -132,7 +136,11 @@ const updateShop = async (req, res) => {
                 shop_name = COALESCE(?, shop_name),
                 address = COALESCE(?, address),
                 phone = COALESCE(?, phone),
+                email = COALESCE(?, email),
                 gst = COALESCE(?, gst),
+                fssai = COALESCE(?, fssai),
+                manager = COALESCE(?, manager),
+                opening_date = COALESCE(?, opening_date),
                 currency = COALESCE(?, currency),
                 tax_rate = COALESCE(?, tax_rate),
                 logo = COALESCE(?, logo),
@@ -140,7 +148,7 @@ const updateShop = async (req, res) => {
                 status = COALESCE(?, status),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `).run(shop_name, address, phone, gst, currency, tax_rate, logo, low_stock_alert, status, id);
+        `).run(shop_name, address, phone, email, gst, fssai, manager, opening_date, currency, tax_rate, logo, low_stock_alert, status, id);
 
         await db.prepare(`
             UPDATE settings SET
@@ -156,7 +164,7 @@ const updateShop = async (req, res) => {
             WHERE shop_id = ?
         `).run(shop_name, address, phone, gst, currency, tax_rate, logo, low_stock_alert, id);
 
-        await logAudit(id, req.user.id, 'Update Shop', `Updated shop details for ${shop.shop_name}`);
+        await logAudit(id, req.user.id, 'Update Shop', `Updated branch details for ${shop.shop_name}`);
         return success(res, 'Shop updated successfully');
     } catch (err) {
         return error(res, err.message, 500);
@@ -184,7 +192,7 @@ const toggleShopStatus = async (req, res) => {
 const deleteShop = async (req, res) => {
     const { id } = req.params;
     if (id === 'shop_default_hq') {
-        return error(res, 'Cannot delete default main headquarters shop', 400);
+        return error(res, 'Cannot delete default main headquarters shop branch', 400);
     }
 
     try {
@@ -193,9 +201,15 @@ const deleteShop = async (req, res) => {
             return error(res, 'Shop not found', 404);
         }
 
+        // Check if active transactions exist for this branch
+        const billCount = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(id);
+        if (parseInt(billCount?.count || 0) > 0) {
+            return error(res, `Cannot delete branch '${shop.shop_name}' because it contains ${billCount.count} active sales transactions`, 400);
+        }
+
         await db.prepare(`UPDATE shops SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
-        await logAudit(id, req.user.id, 'Delete Shop', `Soft deleted shop ${shop.shop_name}`);
-        return success(res, 'Shop deleted successfully');
+        await logAudit(id, req.user.id, 'Delete Shop', `Soft deleted shop branch ${shop.shop_name}`);
+        return success(res, 'Shop branch deleted successfully');
     } catch (err) {
         return error(res, err.message, 500);
     }

@@ -20,6 +20,7 @@ const dashboardRoutes = require('./dashboardRoutes');
 const settingsRoutes = require('./settingsRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
+const adminRoutes = require('./adminRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/shops', shopRoutes);
@@ -40,5 +41,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/admin', adminRoutes);
 
 module.exports = router;

@@ -105,6 +105,30 @@ if (connectionString && connectionString.startsWith('postgres')) {
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     sqliteDb.exec(schemaSql);
+
+    const addColIfMissing = (table, col, typeDef) => {
+        try {
+            const info = sqliteDb.pragma(`table_info(${table})`);
+            if (!info.some(c => c.name === col)) {
+                sqliteDb.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${typeDef}`);
+            }
+        } catch (e) {}
+    };
+
+    addColIfMissing('bills', 'cancelled_by', 'TEXT');
+    addColIfMissing('bills', 'cancellation_reason', 'TEXT');
+    addColIfMissing('bills', 'cancelled_at', 'DATETIME');
+    addColIfMissing('bills', 'remarks', 'TEXT');
+
+    addColIfMissing('shops', 'fssai', 'TEXT');
+    addColIfMissing('shops', 'email', 'TEXT');
+    addColIfMissing('shops', 'opening_date', 'DATE');
+    addColIfMissing('shops', 'manager', 'TEXT');
+
+    addColIfMissing('users', 'photo', 'TEXT');
+    addColIfMissing('users', 'date_of_joining', 'DATE');
+    addColIfMissing('users', 'salary', 'REAL DEFAULT 0');
+
     sqliteDb.pragma('foreign_keys = ON');
 
     dbWrapper = {

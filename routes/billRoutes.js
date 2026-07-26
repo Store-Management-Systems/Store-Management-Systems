@@ -5,7 +5,9 @@ const { authenticate } = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rbac');
 
 router.post('/', authenticate, checkPermission('Billing'), billController.createBill);
-router.get('/', authenticate, checkPermission('History'), billController.getBills);
-router.get('/:id', authenticate, checkPermission('History'), billController.getBillById);
+router.get('/stats', authenticate, billController.getBillStats);
+router.get('/', authenticate, billController.getBills);
+router.get('/:id', authenticate, billController.getBillById);
+router.post('/:id/cancel', authenticate, checkPermission('Billing'), billController.cancelBill);
 
 module.exports = router;

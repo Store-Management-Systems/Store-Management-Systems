@@ -783,3 +783,126 @@ button:active {
 .badge-unpaid { background: rgba(255, 59, 48, 0.15); color: #d70015; }
 .badge-partial { background: rgba(255, 149, 0, 0.15); color: #c97000; }
 .badge-overdue { background: rgba(175, 82, 222, 0.15); color: #8e44ad; }
+.badge-cancelled { background: rgba(142, 142, 147, 0.2); color: #636366; }
+.badge-draft { background: rgba(0, 122, 255, 0.15); color: #007aff; }
+
+/* ─── A4 Commercial Print Layout ─────────────────────────────────────────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printArea, #printArea * {
+    visibility: visible;
+  }
+  #printArea {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print { display: none !important; }
+}
+
+.a4-invoice {
+  font-family: Arial, sans-serif;
+  color: #1e293b;
+  background: #ffffff;
+  padding: 30px;
+  max-width: 800px;
+  margin: 0 auto;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.a4-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #007aff;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.a4-brand h1 { font-size: 24px; font-weight: 800; color: #007aff; margin: 0; }
+.a4-brand p { font-size: 12px; color: #64748b; margin: 2px 0 0 0; }
+
+.a4-meta { text-align: right; font-size: 13px; color: #475569; }
+.a4-meta h2 { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; }
+
+.a4-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+.a4-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+.a4-table th {
+  background: #007aff;
+  color: #ffffff;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.a4-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.a4-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-top: 20px;
+  font-size: 13px;
+}
+
+.a4-total-box {
+  background: #f1f5f9;
+  padding: 16px;
+  border-radius: 8px;
+  min-width: 260px;
+}
+
+.a4-total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.a4-total-row.grand {
+  font-size: 16px;
+  font-weight: 800;
+  color: #007aff;
+  border-top: 2px solid #cbd5e1;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.a4-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+}
