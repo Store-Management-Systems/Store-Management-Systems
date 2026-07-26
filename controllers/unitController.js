@@ -2,63 +2,52 @@ const db = require('../database/init');
 const { v4: uuidv4 } = require('uuid');
 const { success, error } = require('../utils/response');
 
-const getUnits = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const units = db.prepare(`SELECT * FROM units WHERE shop_id = ? ORDER BY name ASC`).all(shopId);
-    return success(res, 'Units retrieved', units);
+const getUnits = async (req, res) => {
+    try {
+        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
+        const units = await db.prepare(`SELECT * FROM units WHERE shop_id = ? ORDER BY name ASC`).all(targetShop);
+        return success(res, 'Units retrieved', units);
+    } catch (err) {
+        return error(res, err.message, 500);
+    }
 };
 
-const createUnit = (req, res) => {
+const createUnit = async (req, res) => {
     const { name } = req.body;
-    const shopId = req.user.active_shop_id;
+    if (!name) return error(res, 'Unit name is required', 400);
 
-    if (!name || name.trim() === '') {
-        return error(res, 'Unit name is required', 400);
+    const targetShop = req.user.active_shop_id;
+    try {
+        const existing = await db.prepare(`SELECT id FROM units WHERE LOWER(name) = LOWER(?) AND shop_id = ?`).get(name.trim(), targetShop);
+        if (existing) return error(res, 'Unit already exists', 400);
+
+        const id = 'unit_' + uuidv4().substring(0, 8);
+        await db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(id, targetShop, name.trim());
+        return success(res, 'Unit created', { id, name: name.trim() }, 201);
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    const trimmed = name.trim();
-
-    // Check duplicate
-    const existing = db.prepare(`SELECT id FROM units WHERE shop_id = ? AND LOWER(name) = LOWER(?)`).get(shopId, trimmed);
-    if (existing) {
-        return error(res, 'Unit already exists', 400);
-    }
-
-    const id = 'unit_' + uuidv4().substring(0, 8);
-    db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(id, shopId, trimmed);
-
-    return success(res, 'Unit created successfully', { id, name: trimmed }, 201);
 };
 
-const updateUnit = (req, res) => {
+const updateUnit = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
-    const shopId = req.user.active_shop_id;
-
-    if (!name || name.trim() === '') {
-        return error(res, 'Unit name is required', 400);
+    try {
+        await db.prepare(`UPDATE units SET name = ? WHERE id = ? AND shop_id = ?`).run(name, id, req.user.active_shop_id);
+        return success(res, 'Unit updated');
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    const trimmed = name.trim();
-    const existing = db.prepare(`SELECT id FROM units WHERE shop_id = ? AND LOWER(name) = LOWER(?) AND id != ?`).get(shopId, trimmed, id);
-    if (existing) {
-        return error(res, 'Unit name already exists', 400);
-    }
-
-    db.prepare(`UPDATE units SET name = ? WHERE id = ? AND shop_id = ?`).run(trimmed, id, shopId);
-    return success(res, 'Unit updated successfully');
 };
 
-const deleteUnit = (req, res) => {
+const deleteUnit = async (req, res) => {
     const { id } = req.params;
-    const shopId = req.user.active_shop_id;
-    db.prepare(`DELETE FROM units WHERE id = ? AND shop_id = ?`).run(id, shopId);
-    return success(res, 'Unit deleted successfully');
+    try {
+        await db.prepare(`DELETE FROM units WHERE id = ? AND shop_id = ?`).run(id, req.user.active_shop_id);
+        return success(res, 'Unit deleted');
+    } catch (err) {
+        return error(res, err.message, 500);
+    }
 };
 
-module.exports = {
-    getUnits,
-    createUnit,
-    updateUnit,
-    deleteUnit
-};
+module.exports = { getUnits, createUnit, updateUnit, deleteUnit };

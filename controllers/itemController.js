@@ -3,195 +3,156 @@ const { v4: uuidv4 } = require('uuid');
 const { success, error } = require('../utils/response');
 const { logAudit } = require('../services/auditService');
 
-const getItems = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const { search, category, low_stock, page = 1, limit = 100 } = req.query;
+const getItems = async (req, res) => {
+    try {
+        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
+        const search = req.query.search || '';
+        const category = req.query.category || '';
 
-    let sql = `SELECT * FROM items WHERE shop_id = ? AND status = 'active'`;
-    const params = [shopId];
+        let sql = `SELECT * FROM items WHERE shop_id = ? AND status = 'active'`;
+        const params = [targetShop];
 
-    if (search) {
-        sql += ` AND name LIKE ?`;
-        params.push(`%${search}%`);
+        if (search) {
+            sql += ` AND LOWER(name) LIKE ?`;
+            params.push(`%${search.toLowerCase()}%`);
+        }
+        if (category && category !== 'All') {
+            sql += ` AND category = ?`;
+            params.push(category);
+        }
+
+        sql += ` ORDER BY created_at DESC`;
+
+        const items = await db.prepare(sql).all(params);
+        return success(res, 'Items retrieved successfully', items);
+    } catch (err) {
+        return error(res, err.message || 'Failed to retrieve items', 500);
     }
-
-    if (category && category !== 'All') {
-        sql += ` AND category = ?`;
-        params.push(category);
-    }
-
-    if (low_stock === 'true' || low_stock === '1') {
-        const shop = db.prepare(`SELECT low_stock_alert FROM shops WHERE id = ?`).get(shopId);
-        const threshold = shop ? shop.low_stock_alert : 5;
-        sql += ` AND stock <= ?`;
-        params.push(threshold);
-    }
-
-    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    params.push(parseInt(limit), offset);
-
-    const items = db.prepare(sql).all(...params);
-
-    // Get count
-    let countSql = `SELECT COUNT(*) as total FROM items WHERE shop_id = ? AND status = 'active'`;
-    const countParams = [shopId];
-    if (search) { countSql += ` AND name LIKE ?`; countParams.push(`%${search}%`); }
-    if (category && category !== 'All') { countSql += ` AND category = ?`; countParams.push(category); }
-    const totalCount = db.prepare(countSql).get(...countParams).total;
-
-    return success(res, 'Items retrieved', items, 200, { total: totalCount, page: parseInt(page), limit: parseInt(limit) });
 };
 
-const getItemById = (req, res) => {
+const getItemById = async (req, res) => {
     const { id } = req.params;
-    const shopId = req.user.active_shop_id;
-    const item = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ? AND status = 'active'`).get(id, shopId);
-
-    if (!item) {
-        return error(res, 'Item not found', 404);
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(id, req.user.active_shop_id);
+        if (!item) {
+            return error(res, 'Item not found', 404);
+        }
+        return success(res, 'Item details retrieved', item);
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    return success(res, 'Item retrieved', item);
 };
 
-const createItem = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    let { name, category = 'General', unit = 'Pcs', buy_price = 0, selling_price = 0, buyPrice, price, stock = 0, qty } = req.body;
+const createItem = async (req, res) => {
+    const { name, category = 'General', unit = 'Pcs', buy_price = 0, selling_price = 0, stock = 0 } = req.body;
 
-    // Backwards compatibility for payload field names
-    buy_price = parseFloat(buy_price !== undefined ? buy_price : (buyPrice || 0));
-    selling_price = parseFloat(selling_price !== undefined ? selling_price : (price || 0));
-    stock = parseFloat(stock !== undefined ? stock : (qty || 0));
-
-    // Validation
-    if (!name || name.trim() === '') {
+    if (!name) {
         return error(res, 'Item name is required', 400);
     }
-    if (name.length > 150) {
-        return error(res, 'Item name cannot exceed 150 characters', 400);
-    }
-    if (isNaN(buy_price) || buy_price < 0) {
-        return error(res, 'Buying price cannot be negative', 400);
-    }
-    if (isNaN(selling_price) || selling_price < 0) {
-        return error(res, 'Selling price cannot be negative', 400);
-    }
-    if (isNaN(stock) || stock < 0) {
-        return error(res, 'Stock cannot be negative', 400);
-    }
 
-    let warning = null;
-    if (buy_price > selling_price) {
-        warning = 'Warning: Buying price is greater than selling price';
-    }
+    const buyPriceNum = parseFloat(buy_price) || 0;
+    const sellingPriceNum = parseFloat(selling_price) || 0;
+    const stockNum = parseFloat(stock) || 0;
+    const activeShop = req.user.active_shop_id;
 
-    const itemId = 'itm_' + uuidv4().substring(0, 8);
-
-    db.transaction(() => {
-        db.prepare(`
-            INSERT INTO items (id, shop_id, name, category, unit, buy_price, selling_price, stock, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(itemId, shopId, name.trim(), category, unit, buy_price, selling_price, stock, 'active');
-
-        // Log initial stock if stock > 0
-        if (stock > 0) {
-            db.prepare(`
-                INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run('stk_' + uuidv4().substring(0, 8), shopId, req.user.id, itemId, name.trim(), 'in', stock, 'Initial Stock', 'Added during item creation');
+    try {
+        const existing = await db.prepare(`SELECT id FROM items WHERE LOWER(name) = LOWER(?) AND shop_id = ? AND status = 'active'`).get(name, activeShop);
+        if (existing) {
+            return error(res, `An item with the name '${name}' already exists in this shop`, 400);
         }
-    })();
 
-    logAudit(shopId, req.user.id, 'Add Item', `Added item '${name}' with initial stock ${stock}`);
+        const itemId = 'itm_' + uuidv4().substring(0, 8);
 
-    return success(res, 'Item created successfully', {
-        id: itemId,
-        name: name.trim(),
-        category,
-        unit,
-        buy_price,
-        selling_price,
-        stock,
-        warning
-    }, 201);
+        await db.prepare(`
+            INSERT INTO items (id, shop_id, name, category, unit, buy_price, selling_price, price, stock, qty, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            itemId, activeShop, name, category, unit, buyPriceNum, sellingPriceNum, sellingPriceNum, stockNum, stockNum, 'active'
+        );
+
+        let warning = null;
+        if (buyPriceNum > 0 && sellingPriceNum < buyPriceNum) {
+            warning = `⚠ Warning: Selling price (${sellingPriceNum}) is lower than buying price (${buyPriceNum})!`;
+        }
+
+        await logAudit(activeShop, req.user.id, 'Create Item', `Added item '${name}' (Selling: ${sellingPriceNum}, Stock: ${stockNum})`);
+
+        return success(res, 'Item created successfully', {
+            id: itemId,
+            name,
+            category,
+            unit,
+            buy_price: buyPriceNum,
+            selling_price: sellingPriceNum,
+            stock: stockNum,
+            warning
+        }, 201);
+    } catch (err) {
+        return error(res, err.message || 'Failed to create item', 500);
+    }
 };
 
-const updateItem = (req, res) => {
+const updateItem = async (req, res) => {
     const { id } = req.params;
-    const shopId = req.user.active_shop_id;
+    const { name, category, unit, buy_price, selling_price, stock } = req.body;
+    const activeShop = req.user.active_shop_id;
 
-    const existing = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(id, shopId);
-    if (!existing) {
-        return error(res, 'Item not found', 404);
-    }
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(id, activeShop);
+        if (!item) {
+            return error(res, 'Item not found', 404);
+        }
 
-    let { name, category, unit, buy_price, selling_price, buyPrice, price, stock, qty } = req.body;
+        const newBuyPrice = buy_price !== undefined ? parseFloat(buy_price) : item.buy_price;
+        const newSellingPrice = selling_price !== undefined ? parseFloat(selling_price) : item.selling_price;
+        const newStock = stock !== undefined ? parseFloat(stock) : item.stock;
 
-    name = name !== undefined ? name.trim() : existing.name;
-    category = category !== undefined ? category : existing.category;
-    unit = unit !== undefined ? unit : existing.unit;
-    buy_price = parseFloat(buy_price !== undefined ? buy_price : (buyPrice !== undefined ? buyPrice : existing.buy_price));
-    selling_price = parseFloat(selling_price !== undefined ? selling_price : (price !== undefined ? price : existing.selling_price));
-    stock = parseFloat(stock !== undefined ? stock : (qty !== undefined ? qty : existing.stock));
-
-    if (name.length > 150) return error(res, 'Item name cannot exceed 150 characters', 400);
-    if (buy_price < 0) return error(res, 'Buying price cannot be negative', 400);
-    if (selling_price < 0) return error(res, 'Selling price cannot be negative', 400);
-    if (stock < 0) return error(res, 'Stock cannot be negative', 400);
-
-    const oldStock = existing.stock;
-
-    db.transaction(() => {
-        db.prepare(`
+        await db.prepare(`
             UPDATE items SET
-                name = ?,
-                category = ?,
-                unit = ?,
+                name = COALESCE(?, name),
+                category = COALESCE(?, category),
+                unit = COALESCE(?, unit),
                 buy_price = ?,
                 selling_price = ?,
+                price = ?,
                 stock = ?,
+                qty = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND shop_id = ?
-        `).run(name, category, unit, buy_price, selling_price, stock, id, shopId);
+        `).run(
+            name, category, unit, newBuyPrice, newSellingPrice, newSellingPrice, newStock, newStock, id, activeShop
+        );
 
-        // Record stock adjustment log if stock was changed manually
-        if (stock !== oldStock) {
-            const diff = stock - oldStock;
-            db.prepare(`
-                INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                'stk_' + uuidv4().substring(0, 8),
-                shopId,
-                req.user.id,
-                id,
-                name,
-                diff > 0 ? 'in' : 'out',
-                Math.abs(diff),
-                'Manual Adjustment',
-                `Stock updated from ${oldStock} to ${stock}`
-            );
+        let warning = null;
+        if (newBuyPrice > 0 && newSellingPrice < newBuyPrice) {
+            warning = `⚠ Warning: Selling price (${newSellingPrice}) is lower than buying price (${newBuyPrice})!`;
         }
-    })();
 
-    logAudit(shopId, req.user.id, 'Edit Item', `Updated item '${name}'`);
-    return success(res, 'Item updated successfully');
+        await logAudit(activeShop, req.user.id, 'Update Item', `Updated item '${item.name}' details`);
+
+        return success(res, 'Item updated successfully', { warning });
+    } catch (err) {
+        return error(res, err.message || 'Failed to update item', 500);
+    }
 };
 
-const deleteItem = (req, res) => {
+const deleteItem = async (req, res) => {
     const { id } = req.params;
-    const shopId = req.user.active_shop_id;
+    const activeShop = req.user.active_shop_id;
 
-    const item = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(id, shopId);
-    if (!item) {
-        return error(res, 'Item not found', 404);
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(id, activeShop);
+        if (!item) {
+            return error(res, 'Item not found', 404);
+        }
+
+        await db.prepare(`UPDATE items SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+        await logAudit(activeShop, req.user.id, 'Delete Item', `Soft deleted item '${item.name}'`);
+
+        return success(res, 'Item deleted successfully');
+    } catch (err) {
+        return error(res, err.message || 'Failed to delete item', 500);
     }
-
-    db.prepare(`UPDATE items SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND shop_id = ?`).run(id, shopId);
-
-    logAudit(shopId, req.user.id, 'Delete Item', `Deleted item '${item.name}'`);
-    return success(res, 'Item deleted successfully');
 };
 
 module.exports = {

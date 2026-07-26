@@ -5,33 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f172a">
 <title>Shop Management System</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- App Main View -->
+<!-- Main Application UI -->
 <div id="app" style="display:none;">
-  <!-- Top Bar -->
+  <!-- Apple Frosted Glass Top Bar -->
   <div class="topbar">
     <div class="topbar-logo" id="topbarLogo">SMS</div>
     <div class="topbar-title" id="topbarTitle">Shop Management System</div>
     
     <div id="topbarAdminShopSelect" style="display:none;margin-right:4px;">
-      <select id="adminShopDropdown" onchange="handleAdminShopSwitch(this.value)" style="padding:4px 8px;font-size:12px;max-width:130px;background:#fff;border-radius:8px;">
+      <select id="adminShopDropdown" onchange="handleAdminShopSwitch(this.value)" style="padding:6px 12px;font-size:12px;max-width:140px;background:rgba(255,255,255,0.15);color:#fff;border-radius:10px;border:1px solid rgba(255,255,255,0.2);">
       </select>
     </div>
 
-    <button onclick="openReportsModal()" title="Reports & Reports Export" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;">📊</button>
-    <button onclick="showSection('settings')" title="Settings" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;">⚙</button>
-    <button onclick="handleLogout()" title="Logout" style="background:rgba(239,68,68,.3);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:14px;">🚪</button>
+    <button onclick="openReportsModal()" title="Export Reports" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:16px;">📊</button>
+    <button onclick="showSection('settings')" title="Shop Settings" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:16px;">⚙</button>
+    <button onclick="handleLogout()" title="Logout" style="background:rgba(255,59,48,0.3);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:14px;">🚪</button>
   </div>
 
-  <!-- Content Render Area -->
+  <!-- Content Section -->
   <div class="content" id="mainContent"></div>
 
-  <!-- Bottom Navigation -->
+  <!-- iOS Floating Bottom Navigation Bar -->
   <div class="bottomnav" id="bottomNav">
     <button class="nav-btn active" id="nav-dashboard" onclick="showSection('dashboard')">
       <span class="nav-icon">📊</span>Dashboard
@@ -48,12 +49,12 @@
   </div>
 </div>
 
-<!-- Login Overlay Screen -->
+<!-- Apple Frosted Glass Login Overlay Screen -->
 <div id="loginScreen" class="login-overlay">
   <div class="login-card fade-in">
     <div class="login-logo" id="loginLogo">SMS</div>
     <h2 class="login-title" id="loginShopName">Shop Management System</h2>
-    <p class="login-subtitle">Sign in to access your dashboard</p>
+    <p class="login-subtitle">Sign in with your store credentials to continue</p>
 
     <form id="loginForm" onsubmit="handleLoginSubmit(event)">
       <div class="form-group">
@@ -64,26 +65,27 @@
         <label class="form-label">Password</label>
         <div style="position:relative;">
           <input type="password" id="loginPassword" placeholder="••••••••" value="admin123" required autocomplete="current-password">
-          <button type="button" onclick="togglePasswordVisibility()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);font-size:12px;padding:4px;">👁 Show</button>
+          <button type="button" onclick="togglePasswordVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-secondary);font-size:12px;padding:4px;font-weight:600;">👁 Show</button>
         </div>
       </div>
       
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;font-size:12px;color:var(--text-muted);">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="rememberMe" checked style="width:auto;"> Remember Me
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-size:13px;color:var(--text-secondary);">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="rememberMe" checked style="width:auto;accent-color:var(--ios-blue);"> Remember Me
         </label>
-        <span style="color:var(--accent);cursor:pointer;" onclick="alert('Please contact your administrator to reset your password.')">Forgot Password?</span>
+        <span style="color:var(--ios-blue);cursor:pointer;font-weight:600;" onclick="alert('Please contact your store administrator to reset your password.')">Forgot Password?</span>
       </div>
 
-      <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;padding:12px;font-size:15px;">🔐 Sign In</button>
+      <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;padding:14px;font-size:16px;">🔐 Sign In</button>
     </form>
     
-    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-light);">
+    <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-secondary);">
+      Default Admin: <strong style="color:var(--ios-blue);">admin</strong> / <strong style="color:var(--ios-blue);">admin123</strong>
     </div>
   </div>
 </div>
 
-<!-- Modal Overlay -->
+<!-- iOS Sheet Modal Overlay -->
 <div class="modal-overlay" id="modalOverlay" style="display:none;" onclick="closeModal(event)">
   <div class="modal" id="modal">
     <div class="modal-header">

@@ -1,89 +1,49 @@
 const db = require('../database/init');
 const { success, error } = require('../utils/response');
 
-const getDashboardStats = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const shop = db.prepare(`SELECT * FROM shops WHERE id = ?`).get(shopId) || {};
-    const lowStockAlert = shop.low_stock_alert || 5;
+const getDashboardStats = async (req, res) => {
+    try {
+        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
 
-    // Today & Month date formatting
-    const todayStr = new Date().toISOString().split('T')[0];
-    const monthStr = todayStr.substring(0, 7);
+        // Revenue Stats
+        const totalRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop);
+        const todayRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
+        const monthRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= DATE_TRUNC('month', CURRENT_DATE)`).get(targetShop);
 
-    // Revenue & Bills Aggregates
-    const revenueAgg = db.prepare(`
-        SELECT
-            COALESCE(SUM(total), 0) as totalRevenue,
-            COALESCE(SUM(CASE WHEN date(created_at) = date(?) THEN total ELSE 0 END), 0) as todayRevenue,
-            COALESCE(SUM(CASE WHEN strftime('%Y-%m', created_at) = ? THEN total ELSE 0 END), 0) as monthlyRevenue,
-            COUNT(*) as totalBills,
-            COALESCE(SUM(CASE WHEN date(created_at) = date(?) THEN 1 ELSE 0 END), 0) as todayBills
-        FROM bills
-        WHERE shop_id = ?
-    `).get(todayStr, monthStr, todayStr, shopId);
+        // Bill Count Stats
+        const totalBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ?`).get(targetShop);
+        const todayBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND created_at >= CURRENT_DATE`).get(targetShop);
 
-    // Items Stats
-    const totalItems = db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active'`).get(shopId).count;
-    const lowStockItems = db.prepare(`SELECT * FROM items WHERE shop_id = ? AND status = 'active' AND stock <= ? ORDER BY stock ASC`).all(shopId, lowStockAlert);
+        // Item & Inventory Stats
+        const shopSettings = await db.prepare(`SELECT low_stock_alert FROM settings WHERE shop_id = ?`).get(targetShop);
+        const threshold = shopSettings ? (shopSettings.low_stock_alert || 5) : 5;
 
-    // Top Selling Items
-    const topSellingItems = db.prepare(`
-        SELECT bi.item_id, bi.name, SUM(bi.qty) as total_qty, SUM(bi.total) as total_revenue
-        FROM bill_items bi
-        JOIN bills b ON bi.bill_id = b.id
-        WHERE b.shop_id = ?
-        GROUP BY bi.item_id, bi.name
-        ORDER BY total_qty DESC
-        LIMIT 5
-    `).all(shopId);
+        const totalItemsRes = await db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active'`).get(targetShop);
+        const lowStockItems = await db.prepare(`SELECT id, name, stock, unit, category FROM items WHERE shop_id = ? AND status = 'active' AND stock <= ? ORDER BY stock ASC`).all(targetShop, threshold);
 
-    // Recent Bills
-    const recentBills = db.prepare(`SELECT * FROM bills WHERE shop_id = ? ORDER BY created_at DESC LIMIT 5`).all(shopId);
-    recentBills.forEach(b => {
-        b.billNo = b.bill_number;
-        b.customerName = b.customer_name;
-        b.customerPhone = b.customer_phone;
-        b.date = b.created_at;
-    });
+        // Recent 5 Bills
+        const recentBills = await db.prepare(`SELECT * FROM bills WHERE shop_id = ? ORDER BY created_at DESC LIMIT 5`).all(targetShop);
 
-    // Customers count
-    const totalCustomers = db.prepare(`SELECT COUNT(*) as count FROM customers WHERE shop_id = ?`).get(shopId).count;
-
-    let adminMetrics = {};
-    if (req.user.role === 'Admin') {
-        const totalShops = db.prepare(`SELECT COUNT(*) as count FROM shops WHERE status = 'active'`).get().count;
-        const totalOwners = db.prepare(`SELECT COUNT(*) as count FROM users WHERE role = 'Owner' AND status = 'active'`).get().count;
-        const totalStaff = db.prepare(`SELECT COUNT(*) as count FROM users WHERE role IN ('Staff', 'Cashier', 'Manager') AND status = 'active'`).get().count;
-        adminMetrics = { totalShops, totalOwners, totalStaff };
+        return success(res, 'Dashboard statistics loaded', {
+            revenue: {
+                total: parseFloat(totalRevRes?.sum || 0),
+                today: parseFloat(todayRevRes?.sum || 0),
+                monthly: parseFloat(monthRevRes?.sum || 0)
+            },
+            bills: {
+                total: parseInt(totalBillsRes?.count || 0),
+                today: parseInt(todayBillsRes?.count || 0)
+            },
+            items: {
+                total: parseInt(totalItemsRes?.count || 0),
+                lowStockCount: lowStockItems.length,
+                lowStockItems
+            },
+            recentBills
+        });
+    } catch (err) {
+        return error(res, err.message || 'Failed to load dashboard stats', 500);
     }
-
-    return success(res, 'Dashboard analytics retrieved', {
-        shop: {
-            id: shop.id,
-            name: shop.shop_name,
-            code: shop.shop_code,
-            currency: shop.currency || '₹',
-            lowStockAlert: lowStockAlert
-        },
-        revenue: {
-            total: revenueAgg.totalRevenue,
-            today: revenueAgg.todayRevenue,
-            monthly: revenueAgg.monthlyRevenue
-        },
-        bills: {
-            total: revenueAgg.totalBills,
-            today: revenueAgg.todayBills
-        },
-        items: {
-            total: totalItems,
-            lowStockCount: lowStockItems.length,
-            lowStockItems: lowStockItems
-        },
-        topSellingItems,
-        recentBills,
-        totalCustomers,
-        ...adminMetrics
-    });
 };
 
 module.exports = {

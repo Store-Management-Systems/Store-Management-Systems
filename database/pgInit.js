@@ -1,0 +1,245 @@
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+
+const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_X23EGjmybNrO@ep-old-waterfall-ay86a9u4-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
+
+const pool = new Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false }
+});
+
+async function initNeonDatabase() {
+    console.log('🚀 Initializing Neon PostgreSQL Database Schemas...');
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. DDL Statements
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS shops (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_name VARCHAR(150) NOT NULL,
+                name VARCHAR(150),
+                shop_code VARCHAR(50) UNIQUE NOT NULL,
+                owner_id VARCHAR(50),
+                address TEXT,
+                phone VARCHAR(50),
+                gst VARCHAR(50),
+                currency VARCHAR(10) DEFAULT '₹',
+                tax_rate NUMERIC DEFAULT 0,
+                logo TEXT,
+                low_stock_alert INT DEFAULT 5,
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id VARCHAR(50) PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                email VARCHAR(150),
+                password TEXT NOT NULL,
+                password_hash TEXT,
+                role VARCHAR(50) DEFAULT 'Staff',
+                shop_id VARCHAR(50) REFERENCES shops(id),
+                permissions TEXT DEFAULT '[]',
+                status VARCHAR(20) DEFAULT 'active',
+                phone VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS categories (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS units (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                name VARCHAR(50) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS items (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                name VARCHAR(150) NOT NULL,
+                category VARCHAR(100) DEFAULT 'General',
+                unit VARCHAR(50) DEFAULT 'Pcs',
+                buy_price NUMERIC DEFAULT 0,
+                selling_price NUMERIC DEFAULT 0,
+                price NUMERIC DEFAULT 0,
+                stock NUMERIC DEFAULT 0,
+                qty NUMERIC DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS customers (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50),
+                email VARCHAR(150),
+                address TEXT,
+                gst VARCHAR(50),
+                birthday DATE,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS bills (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                user_id VARCHAR(50),
+                bill_number VARCHAR(50) NOT NULL,
+                customer_name VARCHAR(150),
+                customer_phone VARCHAR(50),
+                subtotal NUMERIC DEFAULT 0,
+                tax NUMERIC DEFAULT 0,
+                discount NUMERIC DEFAULT 0,
+                total NUMERIC DEFAULT 0,
+                payment_mode VARCHAR(50) DEFAULT 'Cash',
+                status VARCHAR(20) DEFAULT 'Completed',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS bill_items (
+                id VARCHAR(50) PRIMARY KEY,
+                bill_id VARCHAR(50) REFERENCES bills(id) ON DELETE CASCADE,
+                item_id VARCHAR(50),
+                item_name VARCHAR(150) NOT NULL,
+                price NUMERIC DEFAULT 0,
+                qty NUMERIC DEFAULT 0,
+                total NUMERIC DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS stock_logs (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) REFERENCES shops(id) ON DELETE CASCADE,
+                user_id VARCHAR(50),
+                item_id VARCHAR(50),
+                item_name VARCHAR(150) NOT NULL,
+                type VARCHAR(20) NOT NULL,
+                quantity NUMERIC DEFAULT 0,
+                qty NUMERIC DEFAULT 0,
+                reason VARCHAR(100),
+                supplier VARCHAR(150),
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50) UNIQUE REFERENCES shops(id) ON DELETE CASCADE,
+                shop_name VARCHAR(150) NOT NULL,
+                tagline TEXT,
+                address TEXT,
+                phone VARCHAR(50),
+                gst VARCHAR(50),
+                currency VARCHAR(10) DEFAULT '₹',
+                tax_rate NUMERIC DEFAULT 0,
+                logo TEXT,
+                low_stock_alert INT DEFAULT 5,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50),
+                user_id VARCHAR(50),
+                action VARCHAR(100) NOT NULL,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                id VARCHAR(50) PRIMARY KEY,
+                shop_id VARCHAR(50),
+                title VARCHAR(150) NOT NULL,
+                message TEXT,
+                type VARCHAR(50) DEFAULT 'info',
+                is_read INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 2. Indexes
+        await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_pg_items_shop ON items(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_bills_shop ON bills(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_bills_created ON bills(created_at);
+            CREATE INDEX IF NOT EXISTS idx_pg_stock_logs_shop ON stock_logs(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_customers_shop ON customers(shop_id);
+        `);
+
+        // 3. Seed Default Shop
+        const shopCheck = await client.query('SELECT id FROM shops WHERE id = $1', ['shop_default_hq']);
+        if (shopCheck.rowCount === 0) {
+            await client.query(`
+                INSERT INTO shops (id, name, shop_name, shop_code, owner_id, address, phone, gst, currency, tax_rate, low_stock_alert, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `, ['shop_default_hq', 'Main Headquarters', 'Main Headquarters', 'HQ001', 'usr_super_admin', '123 Central Business Ave', '9876543210', 'GSTIN12345678', '₹', 0, 5, 'active']);
+            console.log('✅ Seeded Main Headquarters Shop in Neon DB');
+        }
+
+        // 4. Seed Super Admin User
+        const adminCheck = await client.query('SELECT id FROM users WHERE username = $1', ['admin']);
+        const hashedPassword = bcrypt.hashSync('admin123', 10);
+        const allPermissions = JSON.stringify([
+            'Dashboard', 'Inventory', 'Billing', 'Reports', 'Customers',
+            'Stock In', 'Stock Out', 'Delete Item', 'Edit Item', 'Create Item',
+            'Discount', 'Print Bill', 'Export Excel', 'Settings', 'Users',
+            'Shops', 'Financial Reports', 'Categories', 'Units', 'Purchase Price',
+            'Selling Price', 'History'
+        ]);
+
+        if (adminCheck.rowCount === 0) {
+            await client.query(`
+                INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, permissions, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `, ['usr_super_admin', 'Super Admin', 'admin', 'admin@shop.com', hashedPassword, hashedPassword, 'Admin', 'shop_default_hq', allPermissions, 'active']);
+            console.log('✅ Seeded Super Admin Account (admin / admin123) in Neon DB');
+        }
+
+        // 5. Seed Default Categories & Units
+        const defaultCats = ['General', 'Bakery', 'Beverages', 'Snacks', 'Dairy', 'Others'];
+        for (let idx = 0; idx < defaultCats.length; idx++) {
+            await client.query(`
+                INSERT INTO categories (id, shop_id, name) VALUES ($1, $2, $3)
+                ON CONFLICT (id) DO NOTHING
+            `, [`cat_${idx + 1}`, 'shop_default_hq', defaultCats[idx]]);
+        }
+
+        const defaultUnits = ['Pcs', 'Kg', 'Grams', 'Ltr', 'Ml', 'Box', 'Pack'];
+        for (let idx = 0; idx < defaultUnits.length; idx++) {
+            await client.query(`
+                INSERT INTO units (id, shop_id, name) VALUES ($1, $2, $3)
+                ON CONFLICT (id) DO NOTHING
+            `, [`unit_${idx + 1}`, 'shop_default_hq', defaultUnits[idx]]);
+        }
+
+        // 6. Seed Default Settings
+        await client.query(`
+            INSERT INTO settings (id, shop_id, shop_name, tagline, address, phone, gst, currency, tax_rate, low_stock_alert)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (shop_id) DO NOTHING
+        `, ['set_default_hq', 'shop_default_hq', 'Main Headquarters', 'Quality & Service First', '123 Central Business Ave', '9876543210', 'GSTIN12345678', '₹', 0, 5]);
+
+        await client.query('COMMIT');
+        console.log('✨ Neon PostgreSQL Database Ready and Fully Provisioned!');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('❌ Failed to initialize Neon DB:', err);
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+module.exports = { pool, initNeonDatabase };

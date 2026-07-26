@@ -3,238 +3,134 @@ const { v4: uuidv4 } = require('uuid');
 const { success, error } = require('../utils/response');
 const { logAudit } = require('../services/auditService');
 
-const stockIn = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const { itemId, item_id, quantity, qty, supplier, notes } = req.body;
-
-    const targetId = itemId || item_id;
-    const amount = parseFloat(quantity || qty);
-
-    if (!targetId || isNaN(amount) || amount <= 0) {
-        return error(res, 'Valid item ID and positive quantity are required', 400);
+const stockIn = async (req, res) => {
+    const { itemId, qty, supplier, notes } = req.body;
+    if (!itemId || !qty || parseFloat(qty) <= 0) {
+        return error(res, 'Item ID and positive quantity are required', 400);
     }
+    const targetShop = req.user.active_shop_id;
+    const addQty = parseFloat(qty);
 
-    const item = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ? AND status = 'active'`).get(targetId, shopId);
-    if (!item) {
-        return error(res, 'Item not found', 404);
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(itemId, targetShop);
+        if (!item) return error(res, 'Item not found', 404);
+
+        await db.prepare(`UPDATE items SET stock = stock + ?, qty = qty + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND shop_id = ?`).run(addQty, addQty, itemId, targetShop);
+
+        const logId = 'log_' + uuidv4().substring(0, 8);
+        await db.prepare(`
+            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, qty, supplier, notes)
+            VALUES (?, ?, ?, ?, ?, 'in', ?, ?, ?, ?)
+        `).run(logId, targetShop, req.user.id, itemId, item.name, addQty, addQty, supplier || null, notes || 'Manual Stock In');
+
+        await logAudit(targetShop, req.user.id, 'Stock In', `Added ${addQty} ${item.unit} to '${item.name}'`);
+        return success(res, 'Stock added successfully');
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    db.transaction(() => {
-        db.prepare(`UPDATE items SET stock = stock + ? WHERE id = ? AND shop_id = ?`).run(amount, targetId, shopId);
-
-        db.prepare(`
-            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, supplier, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            'stk_' + uuidv4().substring(0, 8),
-            shopId,
-            req.user.id,
-            targetId,
-            item.name,
-            'in',
-            amount,
-            supplier || '',
-            notes || ''
-        );
-    })();
-
-    logAudit(shopId, req.user.id, 'Stock In', `Added ${amount} ${item.unit} to ${item.name}`);
-    return success(res, `Successfully added ${amount} ${item.unit} to ${item.name}`);
 };
 
-const stockOut = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const { itemId, item_id, quantity, qty, reason = 'Sold', notes } = req.body;
-
-    const targetId = itemId || item_id;
-    const amount = parseFloat(quantity || qty);
-
-    if (!targetId || isNaN(amount) || amount <= 0) {
-        return error(res, 'Valid item ID and positive quantity are required', 400);
+const stockOut = async (req, res) => {
+    const { itemId, qty, reason = 'Other', notes } = req.body;
+    if (!itemId || !qty || parseFloat(qty) <= 0) {
+        return error(res, 'Item ID and positive quantity are required', 400);
     }
+    const targetShop = req.user.active_shop_id;
+    const removeQty = parseFloat(qty);
 
-    const item = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ? AND status = 'active'`).get(targetId, shopId);
-    if (!item) {
-        return error(res, 'Item not found', 404);
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(itemId, targetShop);
+        if (!item) return error(res, 'Item not found', 404);
+
+        await db.prepare(`UPDATE items SET stock = GREATEST(0, stock - ?), qty = GREATEST(0, qty - ?), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND shop_id = ?`).run(removeQty, removeQty, itemId, targetShop);
+
+        const logId = 'log_' + uuidv4().substring(0, 8);
+        await db.prepare(`
+            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, qty, reason, notes)
+            VALUES (?, ?, ?, ?, ?, 'out', ?, ?, ?, ?)
+        `).run(logId, targetShop, req.user.id, itemId, item.name, removeQty, removeQty, reason, notes || 'Manual Stock Out');
+
+        await logAudit(targetShop, req.user.id, 'Stock Out', `Removed ${removeQty} ${item.unit} from '${item.name}' (${reason})`);
+        return success(res, 'Stock removed successfully');
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    if (item.stock < amount) {
-        return error(res, `Insufficient stock! Only ${item.stock} ${item.unit} available in inventory`, 400);
-    }
-
-    db.transaction(() => {
-        db.prepare(`UPDATE items SET stock = MAX(0, stock - ?) WHERE id = ? AND shop_id = ?`).run(amount, targetId, shopId);
-
-        db.prepare(`
-            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            'stk_' + uuidv4().substring(0, 8),
-            shopId,
-            req.user.id,
-            targetId,
-            item.name,
-            'out',
-            amount,
-            reason,
-            notes || ''
-        );
-    })();
-
-    logAudit(shopId, req.user.id, 'Stock Out', `Removed ${amount} ${item.unit} from ${item.name}`);
-    return success(res, `Successfully removed ${amount} ${item.unit} from ${item.name}`);
 };
 
-const adjustStock = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const { itemId, item_id, newQuantity, new_quantity, reason = 'Manual Audit', notes } = req.body;
+const adjustStock = async (req, res) => {
+    const { itemId, newStock, reason = 'Inventory Count' } = req.body;
+    if (!itemId || newStock === undefined) return error(res, 'Item ID and new stock count required', 400);
 
-    const targetId = itemId || item_id;
-    const targetQty = parseFloat(newQuantity !== undefined ? newQuantity : new_quantity);
+    const targetShop = req.user.active_shop_id;
+    const stockVal = parseFloat(newStock) || 0;
 
-    if (!targetId || isNaN(targetQty) || targetQty < 0) {
-        return error(res, 'Valid item ID and non-negative quantity required', 400);
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(itemId, targetShop);
+        if (!item) return error(res, 'Item not found', 404);
+
+        const diff = stockVal - parseFloat(item.stock || 0);
+        await db.prepare(`UPDATE items SET stock = ?, qty = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND shop_id = ?`).run(stockVal, stockVal, itemId, targetShop);
+
+        const logId = 'log_' + uuidv4().substring(0, 8);
+        await db.prepare(`
+            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, qty, reason, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(logId, targetShop, req.user.id, itemId, item.name, diff >= 0 ? 'in' : 'out', Math.abs(diff), Math.abs(diff), reason, `Stock adjusted to ${stockVal}`);
+
+        return success(res, 'Stock adjusted successfully');
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    const item = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ? AND status = 'active'`).get(targetId, shopId);
-    if (!item) {
-        return error(res, 'Item not found', 404);
-    }
-
-    const diff = targetQty - item.stock;
-
-    db.transaction(() => {
-        db.prepare(`UPDATE items SET stock = ? WHERE id = ? AND shop_id = ?`).run(targetQty, targetId, shopId);
-
-        db.prepare(`
-            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            'stk_' + uuidv4().substring(0, 8),
-            shopId,
-            req.user.id,
-            targetId,
-            item.name,
-            diff >= 0 ? 'in' : 'out',
-            Math.abs(diff),
-            reason,
-            notes || `Adjusted stock from ${item.stock} to ${targetQty}`
-        );
-    })();
-
-    logAudit(shopId, req.user.id, 'Stock Adjust', `Adjusted ${item.name} stock to ${targetQty}`);
-    return success(res, `Stock adjusted to ${targetQty} ${item.unit}`);
 };
 
-const transferStock = (req, res) => {
-    const sourceShopId = req.user.active_shop_id;
-    const { itemId, item_id, targetShopId, target_shop_id, quantity, qty, notes } = req.body;
-
-    const sourceItemId = itemId || item_id;
-    const destShopId = targetShopId || target_shop_id;
-    const amount = parseFloat(quantity || qty);
-
-    if (!sourceItemId || !destShopId || isNaN(amount) || amount <= 0) {
-        return error(res, 'Source item, target shop, and valid quantity required', 400);
+const transferStock = async (req, res) => {
+    const { itemId, targetShopId, qty } = req.body;
+    if (!itemId || !targetShopId || !qty || parseFloat(qty) <= 0) {
+        return error(res, 'Item ID, target shop ID, and quantity required', 400);
     }
 
-    if (sourceShopId === destShopId) {
-        return error(res, 'Target shop must be different from source shop', 400);
-    }
+    const sourceShop = req.user.active_shop_id;
+    const transferQty = parseFloat(qty);
 
-    const sourceItem = db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ? AND status = 'active'`).get(sourceItemId, sourceShopId);
-    if (!sourceItem) {
-        return error(res, 'Source item not found', 404);
-    }
+    try {
+        const item = await db.prepare(`SELECT * FROM items WHERE id = ? AND shop_id = ?`).get(itemId, sourceShop);
+        if (!item) return error(res, 'Item not found in source shop', 404);
 
-    if (sourceItem.stock < amount) {
-        return error(res, `Insufficient stock to transfer. Only ${sourceItem.stock} ${sourceItem.unit} available`, 400);
-    }
-
-    const destShop = db.prepare(`SELECT * FROM shops WHERE id = ?`).get(destShopId);
-    if (!destShop) {
-        return error(res, 'Target shop not found', 404);
-    }
-
-    db.transaction(() => {
-        // 1. Deduct from source shop
-        db.prepare(`UPDATE items SET stock = stock - ? WHERE id = ? AND shop_id = ?`).run(amount, sourceItemId, sourceShopId);
-
-        // 2. Add or update item in target shop
-        let destItem = db.prepare(`SELECT * FROM items WHERE shop_id = ? AND LOWER(name) = LOWER(?) AND status = 'active'`).get(destShopId, sourceItem.name);
-        let destItemId;
-        if (destItem) {
-            destItemId = destItem.id;
-            db.prepare(`UPDATE items SET stock = stock + ? WHERE id = ? AND shop_id = ?`).run(amount, destItemId, destShopId);
-        } else {
-            destItemId = 'itm_' + uuidv4().substring(0, 8);
-            db.prepare(`
-                INSERT INTO items (id, shop_id, name, category, unit, buy_price, selling_price, stock, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(destItemId, destShopId, sourceItem.name, sourceItem.category, sourceItem.unit, sourceItem.buy_price, sourceItem.selling_price, amount, 'active');
+        if (parseFloat(item.stock) < transferQty) {
+            return error(res, `Insufficient stock (${item.stock} available)`, 400);
         }
 
-        // 3. Create logs in both shops
-        db.prepare(`
-            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run('stk_' + uuidv4().substring(0, 8), sourceShopId, req.user.id, sourceItemId, sourceItem.name, 'out', amount, 'Stock Transfer', `Transferred to ${destShop.shop_name}`);
+        // Deduct from source shop
+        await db.prepare(`UPDATE items SET stock = stock - ?, qty = qty - ? WHERE id = ? AND shop_id = ?`).run(transferQty, transferQty, itemId, sourceShop);
 
-        db.prepare(`
-            INSERT INTO stock_logs (id, shop_id, user_id, item_id, item_name, type, quantity, reason, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run('stk_' + uuidv4().substring(0, 8), destShopId, req.user.id, destItemId, sourceItem.name, 'in', amount, 'Stock Transfer', `Received from shop ${sourceShopId}`);
-    })();
+        // Add to target shop (find or create)
+        const targetItem = await db.prepare(`SELECT id FROM items WHERE LOWER(name) = LOWER(?) AND shop_id = ? AND status = 'active'`).get(item.name, targetShopId);
 
-    logAudit(sourceShopId, req.user.id, 'Stock Transfer', `Transferred ${amount} ${sourceItem.unit} of ${sourceItem.name} to ${destShop.shop_name}`);
-    return success(res, `Transferred ${amount} ${sourceItem.unit} to ${destShop.shop_name}`);
+        if (targetItem) {
+            await db.prepare(`UPDATE items SET stock = stock + ?, qty = qty + ? WHERE id = ? AND shop_id = ?`).run(transferQty, transferQty, targetItem.id, targetShopId);
+        } else {
+            const newItemId = 'itm_' + uuidv4().substring(0, 8);
+            await db.prepare(`
+                INSERT INTO items (id, shop_id, name, category, unit, buy_price, selling_price, price, stock, qty, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            `).run(newItemId, targetShopId, item.name, item.category, item.unit, item.buy_price, item.selling_price, item.selling_price, transferQty, transferQty);
+        }
+
+        await logAudit(sourceShop, req.user.id, 'Stock Transfer', `Transferred ${transferQty} of '${item.name}' to shop ${targetShopId}`);
+        return success(res, 'Stock transferred successfully');
+    } catch (err) {
+        return error(res, err.message, 500);
+    }
 };
 
-const getStockLogs = (req, res) => {
-    const shopId = req.user.active_shop_id;
-    const { search, type, from, to, page = 1, limit = 100 } = req.query;
-
-    let sql = `SELECT sl.*, u.name as user_name FROM stock_logs sl LEFT JOIN users u ON sl.user_id = u.id WHERE sl.shop_id = ?`;
-    const params = [shopId];
-
-    if (search) {
-        sql += ` AND (sl.item_name LIKE ? OR sl.reason LIKE ? OR sl.notes LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+const getStockLogs = async (req, res) => {
+    try {
+        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
+        const logs = await db.prepare(`SELECT * FROM stock_logs WHERE shop_id = ? ORDER BY created_at DESC LIMIT 100`).all(targetShop);
+        return success(res, 'Stock logs retrieved', logs);
+    } catch (err) {
+        return error(res, err.message, 500);
     }
-
-    if (type) {
-        sql += ` AND sl.type = ?`;
-        params.push(type);
-    }
-
-    if (from) {
-        sql += ` AND date(sl.created_at) >= date(?)`;
-        params.push(from);
-    }
-
-    if (to) {
-        sql += ` AND date(sl.created_at) <= date(?)`;
-        params.push(to);
-    }
-
-    sql += ` ORDER BY sl.created_at DESC LIMIT ? OFFSET ?`;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    params.push(parseInt(limit), offset);
-
-    const logs = db.prepare(sql).all(...params);
-    logs.forEach(l => {
-        l.date = l.created_at;
-        l.itemName = l.item_name;
-        l.qty = l.quantity;
-    });
-
-    return success(res, 'Stock logs retrieved', logs);
 };
 
-module.exports = {
-    stockIn,
-    stockOut,
-    adjustStock,
-    transferStock,
-    getStockLogs
-};
+module.exports = { stockIn, stockOut, adjustStock, transferStock, getStockLogs };

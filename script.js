@@ -281,19 +281,19 @@ async function renderDashboard(c) {
 
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value">${totalItemsCount}</div>
+          <div class="stat-value" style="color:var(--ios-blue);">${totalItemsCount}</div>
           <div class="stat-label">Total Items</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:${lowStockCount > 0 ? 'var(--danger)' : 'var(--success)'};">${lowStockCount}</div>
+          <div class="stat-value" style="color:${lowStockCount > 0 ? 'var(--ios-red)' : 'var(--ios-green)'};">${lowStockCount}</div>
           <div class="stat-label">Low Stock</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">${state.shop.currency}${todayRev.toFixed(0)}</div>
+          <div class="stat-value" style="color:var(--ios-indigo);">${state.shop.currency}${todayRev.toFixed(0)}</div>
           <div class="stat-label">Today's Revenue</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">${todayBillsCount}</div>
+          <div class="stat-value" style="color:var(--ios-purple);">${todayBillsCount}</div>
           <div class="stat-label">Today's Bills</div>
         </div>
       </div>
@@ -1377,7 +1377,7 @@ function toast(msg) {
   if (!t) {
     t = document.createElement('div');
     t.id = 'toastMsg';
-    t.style = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--brown);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+    t.style = `position:fixed;bottom:85px;left:50%;transform:translateX(-50%);background:rgba(18,18,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:999;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.15);transition:opacity 0.25s ease;`;
     document.body.appendChild(t);
   }
   t.textContent = msg;
