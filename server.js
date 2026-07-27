@@ -33,9 +33,18 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Serve Static Frontend Files
-app.use(express.static(path.join(__dirname)));
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve Static Frontend Files with Cache Control
+const staticOptions = {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.json')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
+};
+app.use(express.static(path.join(__dirname), staticOptions));
+app.use(express.static(path.join(__dirname, 'public'), staticOptions));
 
 // API Routes
 app.use('/api', apiRoutes);
