@@ -27,7 +27,7 @@
 
   <!-- Main Application UI -->
   <div id="app" style="display:none;">
-    
+
     <!-- Enterprise Sidebar Navigation -->
     <aside class="app-sidebar" id="appSidebar">
       <div class="sidebar-header">
@@ -78,7 +78,7 @@
 
     <!-- Main Content Area -->
     <div class="app-main">
-      
+
       <!-- Top Bar Header -->
       <header class="topbar">
         <div class="topbar-left">
@@ -92,7 +92,8 @@
           <!-- Global Search -->
           <div class="global-search-wrapper">
             <span class="global-search-icon">🔍</span>
-            <input type="text" class="global-search-input" placeholder="Quick Search... (Ctrl+K)" id="globalSearchInput" onkeydown="handleGlobalSearchKey(event)">
+            <input type="text" class="global-search-input" placeholder="Quick Search... (Ctrl+K)" id="globalSearchInput"
+              onkeydown="handleGlobalSearchKey(event)">
             <span class="global-search-shortcut">⌘K</span>
           </div>
 
@@ -113,7 +114,8 @@
           <button onclick="openReportsModal()" title="Export Reports" class="theme-toggle-btn">📊</button>
 
           <!-- Light / Dark Theme Switcher -->
-          <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleAppTheme()" title="Switch Light/Dark Theme">
+          <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleAppTheme()"
+            title="Switch Light/Dark Theme">
             🌙
           </button>
 
@@ -167,18 +169,18 @@
         <img src="logo.png" alt="SMS Logo">
       </div>
       <h2 class="login-title" id="loginShopName">STORE MANAGEMENT SYSTEMS</h2>
-      <p class="login-subtitle">Sign in to your enterprise ERP dashboard</p>
+      <p class="login-subtitle">Version - UAT</p>
 
       <form id="loginForm" action="javascript:void(0);" onsubmit="handleLoginSubmit(event); return false;">
         <div class="form-group">
-          <label class="form-label">Username or Email</label>
-          <input type="text" id="loginUsername" placeholder="e.g. admin" required autocomplete="username" autofocus>
+          <label class="form-label">Username</label>
+          <input type="text" id="loginUsername" placeholder="" required autocomplete="username" autofocus>
         </div>
 
         <div class="form-group">
           <label class="form-label">Password</label>
           <div style="position:relative;">
-            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+            <input type="password" id="loginPassword" placeholder="" required autocomplete="current-password">
             <button type="button" onclick="togglePasswordVisibility()"
               style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;font-size:12px;padding:4px;font-weight:700;cursor:pointer;">
               👁 Show
@@ -186,12 +188,14 @@
           </div>
         </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;font-size:13px;color:#94a3b8;">
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;font-size:13px;color:#94a3b8;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
             <input type="checkbox" id="rememberMe" checked style="width:auto;accent-color:#3b82f6;"> Remember Me
           </label>
           <span style="color:#3b82f6;cursor:pointer;font-weight:600;"
-            onclick="showToast('Password Reset', 'Contact system support at 9090684957 to reset credentials', 'info')">Forgot Password?</span>
+            onclick="showToast('Password Reset', 'Contact system support at 9090684957 to reset credentials', 'info')">Forgot
+            Password?</span>
         </div>
 
         <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;padding:14px;font-size:15px;">
@@ -199,7 +203,8 @@
         </button>
       </form>
 
-      <div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;color:#94a3b8;text-align:center;">
+      <div
+        style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;color:#94a3b8;text-align:center;">
         Contact Enterprise Support: <strong style="color:#3b82f6;">9090684957</strong>
       </div>
     </div>
@@ -208,9 +213,11 @@
   <!-- Reusable Modal Overlay -->
   <div class="modal-overlay" id="modalOverlay" style="display:none;" onclick="closeModal(event)">
     <div class="modal" id="modal">
-      <div class="modal-header" style="padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;">
+      <div class="modal-header"
+        style="padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;">
         <h2 id="modalTitle" style="font-size:18px;font-weight:700;">Modal</h2>
-        <button class="modal-close" onclick="closeModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">✕</button>
+        <button class="modal-close" onclick="closeModal()"
+          style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">✕</button>
       </div>
       <div id="modalBody" style="padding:20px;"></div>
     </div>
