@@ -421,15 +421,6 @@ function renderSection(name) {
   updateTopbar();
 }
 
-function updateTopbar() {
-  const logo = document.getElementById('topbarLogo');
-  const title = document.getElementById('topbarTitle');
-  title.textContent = state.shop.name;
-  if (state.shop.logo) {
-    logo.innerHTML = `<img src="${state.shop.logo}" alt="logo">`;
-  } else {
-    logo.innerHTML = state.shop.name.substring(0, 3).toUpperCase() || 'SMS';
-  }
 }
 
 // ─── 1. Dashboard Section ─────────────────────────────────────────────────────
