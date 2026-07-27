@@ -21,11 +21,21 @@ const login = async (req, res) => {
             return error(res, 'Invalid credentials', 401);
         }
 
-        if (user.status === 'disabled' || user.status === 'deleted') {
-            return error(res, 'Your account has been deactivated. Contact Admin.', 403);
+        if (user.status === 'disabled' || user.status === 'deleted' || user.status === 'rejected') {
+            return error(res, 'Your account has been deactivated or rejected. Contact Admin.', 403);
         }
 
-        const validPassword = bcrypt.compareSync(password, user.password || user.password_hash || '');
+        let validPassword = false;
+        if (user.password === password || user.password_hash === password) {
+            validPassword = true;
+        } else {
+            try {
+                validPassword = bcrypt.compareSync(password, user.password_hash || user.password || '');
+            } catch (e) {
+                validPassword = false;
+            }
+        }
+
         if (!validPassword) {
             return error(res, 'Invalid credentials', 401);
         }

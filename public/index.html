@@ -169,7 +169,7 @@
       <h2 class="login-title" id="loginShopName">STORE MANAGEMENT SYSTEMS</h2>
       <p class="login-subtitle">Sign in to your enterprise ERP dashboard</p>
 
-      <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+      <form id="loginForm" action="javascript:void(0);" onsubmit="handleLoginSubmit(event); return false;">
         <div class="form-group">
           <label class="form-label">Username or Email</label>
           <input type="text" id="loginUsername" placeholder="e.g. admin" required autocomplete="username" autofocus>

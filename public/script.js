@@ -261,7 +261,11 @@ async function handleLoginSubmit(e) {
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
       try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
-      showToast('Welcome Back!', `Signed in as ${currentUser.name || currentUser.username}`, 'success');
+      try {
+        showToast('Welcome Back!', `Signed in as ${currentUser.name || currentUser.username}`, 'success');
+      } catch (e) {
+        alert('Welcome back!');
+      }
 
       if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
         try { openMultiBranchLoginModal(); } catch (err) {}
@@ -271,14 +275,14 @@ async function handleLoginSubmit(e) {
         loginCard.classList.add('shake-error');
         setTimeout(() => loginCard.classList.remove('shake-error'), 400);
       }
-      showToast('Authentication Failed', res.message || 'Invalid username or password', 'error');
+      alert(res.message || 'Invalid username or password');
     }
   } catch (err) {
     if (loginCard) {
       loginCard.classList.add('shake-error');
       setTimeout(() => loginCard.classList.remove('shake-error'), 400);
     }
-    showToast('Login Error', err.message || 'Invalid credentials', 'error');
+    alert(err.message || 'Invalid credentials');
   } finally {
     if (loginBtn) {
       loginBtn.disabled = false;
