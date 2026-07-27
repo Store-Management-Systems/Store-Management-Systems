@@ -109,6 +109,26 @@ function handleUnauthorized() {
 }
 
 // ─── Authentication Handlers ──────────────────────────────────────────────────
+async function updateApprovalBadge() {
+  try {
+    const btn = document.getElementById('btnTopApprovals');
+    if (!btn) return;
+    if (currentUser && currentUser.role === 'Admin') {
+      const res = await apiFetch('/approvals?status=pending');
+      if (res.success && Array.isArray(res.data)) {
+        const count = res.data.length;
+        btn.innerHTML = `🛡 Approvals ${count > 0 ? `<span style="background:#ef4444;color:#fff;padding:2px 6px;border-radius:10px;font-size:10px;margin-left:4px;">${count}</span>` : ''}`;
+        btn.style.display = 'inline-flex';
+        return;
+      }
+    }
+    if (btn) btn.style.display = (currentUser && currentUser.role === 'Admin') ? 'inline-flex' : 'none';
+  } catch (e) {
+    console.error('Failed to update approval badge:', e);
+  }
+}
+
+// ─── Authentication Handlers ──────────────────────────────────────────────────
 async function checkAuth() {
   const token = localStorage.getItem('sms_token');
   if (!token) {
@@ -142,24 +162,28 @@ async function checkAuth() {
 
       resetInactivityTimer();
 
-      if (currentUser.branches && currentUser.branches.length > 1) {
-        loadMultiBranchDropdown();
-      } else if (currentUser.role === 'Admin') {
-        loadAdminShops();
-      } else {
-        document.getElementById('topbarAdminShopSelect').style.display = 'none';
-      }
+      try {
+        if (currentUser.branches && currentUser.branches.length > 1) {
+          loadMultiBranchDropdown();
+        } else if (currentUser.role === 'Admin') {
+          loadAdminShops();
+        } else {
+          const el = document.getElementById('topbarAdminShopSelect');
+          if (el) el.style.display = 'none';
+        }
+      } catch (err) { console.error('Branch dropdown error:', err); }
 
-      updateTopbar();
-      updateApprovalBadge();
-      await loadInitialData();
-      showSection('dashboard');
+      try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
+      try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
+      try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
+      try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
       if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
-        openMultiBranchLoginModal();
+        try { openMultiBranchLoginModal(); } catch (err) {}
       }
     }
   } catch (e) {
+    console.error('CheckAuth error:', e);
     handleUnauthorized();
   }
 }
