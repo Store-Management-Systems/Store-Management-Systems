@@ -486,8 +486,6 @@ function renderSection(name) {
   updateTopbar();
 }
 
-}
-
 // ─── 1. Dashboard Section ─────────────────────────────────────────────────────
 async function renderDashboard(c) {
   c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading B2B & B2C Dashboard...</div>`;
