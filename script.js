@@ -190,18 +190,27 @@ async function checkAuth() {
 
 async function handleLoginSubmit(e) {
   e.preventDefault();
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
+  const usernameInput = document.getElementById('loginUsername');
+  const passwordInput = document.getElementById('loginPassword');
+  const username = usernameInput ? usernameInput.value.trim() : '';
+  const password = passwordInput ? passwordInput.value : '';
   const loginBtn = document.getElementById('loginBtn');
+  const loginCard = document.getElementById('loginCardContainer');
 
   if (!username || !password) {
-    alert('Please enter username and password');
+    showToast('Validation Error', 'Please enter username and password', 'warning');
+    if (loginCard) {
+      loginCard.classList.add('shake-error');
+      setTimeout(() => loginCard.classList.remove('shake-error'), 400);
+    }
     return;
   }
 
   try {
-    loginBtn.disabled = true;
-    loginBtn.textContent = '⏳ Signing in...';
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.textContent = '⏳ Signing in...';
+    }
 
     const res = await apiFetch('/auth/login', {
       method: 'POST',
@@ -211,18 +220,70 @@ async function handleLoginSubmit(e) {
     if (res.success && res.data && res.data.token) {
       localStorage.setItem('sms_token', res.data.token);
       currentUser = res.data.user;
-      activeShopId = currentUser.shop_id;
+      activeShopId = currentUser ? currentUser.shop_id : null;
 
-      toast('✅ Welcome back!');
-      await checkAuth();
+      if (currentUser && currentUser.shop) {
+        state.shop = {
+          id: currentUser.shop.id,
+          name: currentUser.shop.name || 'My Shop',
+          code: currentUser.shop.code,
+          address: currentUser.shop.address || '',
+          phone: currentUser.shop.phone || '',
+          gst: currentUser.shop.gst || '',
+          currency: currentUser.shop.currency || '₹',
+          taxRate: currentUser.shop.taxRate || 0,
+          logo: currentUser.shop.logo || null,
+          lowStockAlert: currentUser.shop.lowStockAlert || 5
+        };
+      }
+
+      // Hide login overlay & reveal main application screen immediately
+      const loginScreen = document.getElementById('loginScreen');
+      const appScreen = document.getElementById('app');
+      if (loginScreen) loginScreen.style.display = 'none';
+      if (appScreen) appScreen.style.display = 'flex';
+
+      resetInactivityTimer();
+
+      try {
+        if (currentUser.branches && currentUser.branches.length > 1) {
+          loadMultiBranchDropdown();
+        } else if (currentUser.role === 'Admin') {
+          loadAdminShops();
+        } else {
+          const el = document.getElementById('topbarAdminShopSelect');
+          if (el) el.style.display = 'none';
+        }
+      } catch (err) { console.error('Branch dropdown error:', err); }
+
+      try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
+      try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
+      try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
+      try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
+
+      showToast('Welcome Back!', `Signed in as ${currentUser.name || currentUser.username}`, 'success');
+
+      if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
+        try { openMultiBranchLoginModal(); } catch (err) {}
+      }
     } else {
-      alert(res.message || 'Login failed');
+      if (loginCard) {
+        loginCard.classList.add('shake-error');
+        setTimeout(() => loginCard.classList.remove('shake-error'), 400);
+      }
+      showToast('Authentication Failed', res.message || 'Invalid username or password', 'error');
     }
   } catch (err) {
-    alert(err.message || 'Invalid username or password');
+    if (loginCard) {
+      loginCard.classList.add('shake-error');
+      setTimeout(() => loginCard.classList.remove('shake-error'), 400);
+    }
+    showToast('Login Error', err.message || 'Invalid credentials', 'error');
   } finally {
-    loginBtn.disabled = false;
-    loginBtn.textContent = '🔐 Sign In';
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.textContent = '🔐 Sign In';
+    }
   }
 }
 
