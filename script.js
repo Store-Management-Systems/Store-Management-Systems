@@ -283,12 +283,16 @@ function updateTopbar() {
   const titleEl = document.getElementById('topbarTitle');
   const loginLogoEl = document.getElementById('loginLogo');
   const loginShopNameEl = document.getElementById('loginShopName');
+  const sidebarLogoImg = document.getElementById('sidebarLogoImg');
 
   const logoSrc = (state.shop && state.shop.logo) ? state.shop.logo : 'logo.png';
   const shopTitle = (state.shop && state.shop.name) ? state.shop.name : 'STORE MANAGEMENT SYSTEMS';
 
   if (logoEl) {
     logoEl.innerHTML = `<img src="${logoSrc}" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`;
+  }
+  if (sidebarLogoImg) {
+    sidebarLogoImg.src = logoSrc;
   }
   if (titleEl) {
     titleEl.textContent = shopTitle;
@@ -298,6 +302,16 @@ function updateTopbar() {
   }
   if (loginShopNameEl) {
     loginShopNameEl.textContent = shopTitle;
+  }
+
+  if (currentUser) {
+    const pillName = document.getElementById('userPillName');
+    const pillRole = document.getElementById('userPillRole');
+    const avatarCircle = document.getElementById('userAvatarCircle');
+
+    if (pillName) pillName.textContent = currentUser.name || currentUser.username;
+    if (pillRole) pillRole.textContent = currentUser.role || 'STAFF';
+    if (avatarCircle) avatarCircle.textContent = (currentUser.name || currentUser.username || 'A').charAt(0).toUpperCase();
   }
 }
 
@@ -331,14 +345,38 @@ async function loadInitialData() {
   }
 }
 
-// ─── Navigation ──────────────────────────────────────────────────────────────
+// ─── Navigation & Enterprise Theme Engine ─────────────────────────────────────
 let currentSection = 'dashboard';
 
 function showSection(name) {
   currentSection = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
+
   const nb = document.getElementById('nav-' + name);
   if (nb) nb.classList.add('active');
+
+  const sb = document.getElementById('side-' + name);
+  if (sb) sb.classList.add('active');
+
+  const secTitleEl = document.getElementById('currentSectionTitle');
+  if (secTitleEl) {
+    const titles = {
+      dashboard: 'Dashboard',
+      people: 'Parties & Customers',
+      stock: 'Inventory Stock',
+      bill: 'POS Billing',
+      analytics: 'Financial Analytics',
+      history: 'Audit History',
+      settings: 'Settings'
+    };
+    secTitleEl.textContent = titles[name] || name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  // Close mobile sidebar if open
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+
   renderSection(name);
 }
 
@@ -3629,26 +3667,121 @@ function formatDateFull(iso) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
+// ─── Modern Theme Engine, Toast Notifications & UI Utilities ─────────────────
+function initTheme() {
+  const savedTheme = localStorage.getItem('sms_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setAppTheme(savedTheme);
+}
+
+function setAppTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('sms_theme', theme);
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+    btn.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+  }
+}
+
+function toggleAppTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  setAppTheme(next);
+  showToast('Theme Updated', `Switched to ${next === 'dark' ? 'Dark' : 'Light'} Mode`, 'info');
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('appSidebar');
+  if (sb) {
+    sb.classList.toggle('collapsed');
+  }
+}
+
+function toggleMobileMenu() {
+  const sb = document.getElementById('appSidebar');
+  if (sb) {
+    sb.classList.toggle('mobile-open');
+  }
+}
+
+function filterSidebarMenu(query) {
+  const q = query.toLowerCase().trim();
+  document.querySelectorAll('.sidebar-nav-item').forEach(item => {
+    const text = item.textContent.toLowerCase();
+    item.style.display = text.includes(q) ? 'flex' : 'none';
+  });
+}
+
+function handleGlobalSearchKey(e) {
+  if (e.key === 'Enter') {
+    const query = e.target.value.trim();
+    if (!query) return;
+    showToast('Search Triggered', `Searching for "${query}" across inventory & records...`, 'info');
+    showSection('stock');
+    const stockSearchInput = document.getElementById('stockSearch');
+    if (stockSearchInput) {
+      stockSearchInput.value = query;
+      stockSearchInput.dispatchEvent(new Event('input'));
+    }
+  }
+}
+
+function showToast(title, message = '', type = 'info', duration = 4000) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast ${type}`;
+
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  };
+
+  toastEl.innerHTML = `
+    <span style="font-size:18px;">${icons[type] || 'ℹ️'}</span>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:13px;color:var(--text-primary);">${title}</div>
+      ${message ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${message}</div>` : ''}
+    </div>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-weight:700;">✕</button>
+  `;
+
+  container.appendChild(toastEl);
+
+  setTimeout(() => {
+    if (toastEl.parentElement) {
+      toastEl.style.opacity = '0';
+      toastEl.style.transform = 'translateX(100%)';
+      toastEl.style.transition = 'all 0.3s ease';
+      setTimeout(() => toastEl.remove(), 300);
+    }
+  }, duration);
+}
+
 let toastTimer;
 function toast(msg) {
-  let t = document.getElementById('toastMsg');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toastMsg';
-    t.style = `position:fixed;bottom:85px;left:50%;transform:translateX(-50%);background:rgba(18,18,20,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:999;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.15);transition:opacity 0.25s ease;`;
-    document.body.appendChild(t);
-  }
-  t.textContent = msg;
-  t.style.opacity = '1';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.style.opacity = '0', 2500);
+  showToast('Notification', msg, 'info');
 }
 
 function openStockIn() { showSection('stock'); stockTab = 'in'; renderSection('stock'); }
 function openStockOut() { showSection('stock'); stockTab = 'out'; renderSection('stock'); }
 function openCustomersModal() { showSection('people'); }
 
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const searchInput = document.getElementById('globalSearchInput');
+    if (searchInput) searchInput.focus();
+  } else if (e.key === 'Escape') {
+    closeModal();
+  }
+});
+
 // ─── App Initialize ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   checkAuth();
 });
