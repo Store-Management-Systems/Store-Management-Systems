@@ -86,8 +86,10 @@ async function apiFetch(endpoint, options = {}) {
     const data = await response.json();
 
     if (response.status === 401) {
-      handleUnauthorized();
-      throw new Error(data.message || 'Unauthorized');
+      if (endpoint !== '/auth/login') {
+        handleUnauthorized();
+      }
+      throw new Error(data.message || 'Invalid credentials');
     }
 
     if (!response.ok) {
