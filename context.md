@@ -1,127 +1,102 @@
-# Root Context: Store Management Systems (SMS) SaaS ERP
+# Root Context: STORE MANAGEMENT SYSTEMS (Multi-Tenant SaaS POS Platform)
 
-## Purpose
-Store Management Systems (SMS) is an Enterprise SaaS ERP platform designed for multi-tenant organization management, multi-branch operations, inventory control, point-of-sale (POS) billing, party/ledger management, approvals workflow, and financial analytics with granular Role-Based Access Control (RBAC).
+## SaaS Product Definition & Master Architecture
+STORE MANAGEMENT SYSTEMS is a multi-tenant SaaS platform providing POS and store-management services to independent Organizations.
 
-## Final Business Model & Organizational Hierarchy
 ```
-                    ADMIN (Superadmin)
-                      │
-               Creates/Deletes
-                      │
-                ORGANIZATION
-                      │
-               Assigns OWNER
-                      │
-            ┌─────────┼─────────┐
-            ↓         ↓         ↓
-         Branch 1  Branch 2  Branch 3 (Shops)
-            │         │         │
-         Existing operational modules
+                     STORE MANAGEMENT SYSTEMS
+                                │
+                         SaaS Platform
+                                │
+               ┌────────────────┴────────────────┐
+               ↓                                 ↓
+        Organization A                    Organization B
+               │                                 │
+             Owner                             Owner
+               │                                 │
+          ┌────┼────┐                       ┌────┼────┐
+          ↓    ↓    ↓                       ↓         ↓
+       Branch Branch Branch               Branch     Branch
+         A1    A2    A3                    B1         B2
+          │
+          ↓
+     POS / Store Operations
 ```
 
-### Hierarchy Breakdown & Role Responsibilities
-1. **ADMIN (Superadmin)**:
-   - Creates and deletes Organizations.
-   - Appoints/assigns Organization Owners (`owner_id`).
-   - Configures branch pricing (`price_per_branch`) and inspects subscription details.
-   - Admin Dashboard displays: Organizations, Owners, Active Branch Count, Price Per Branch, Current Subscription Amount (`Active Branches × Price Per Branch`), Status, and Expiry Date.
+### Hierarchy Breakdown & Role Definitions
+1. **PLATFORM ADMIN (Superadmin)**:
+   - Administrator of the STORE MANAGEMENT SYSTEMS SaaS platform.
+   - Manages Organizations (creates, views, activates, deactivates, soft-deletes).
+   - Appoints Organization Owners.
+   - Configures global Platform Settings (support info, default SaaS currency, default branch subscription rates, session rules).
+   - Inspects SaaS Platform Metrics (Total Organizations, Active Organizations, Total Branches, Active Billable Branches, Active/Expiring Subscriptions).
+   - Does NOT engage in branch-level POS operations or view operational widgets.
 
-2. **ORGANIZATION**:
-   - Corporate tenant entity (`id`, `name`, `code`, `owner_id`, `subscription_plan`, `subscription_status`, `subscription_expiry`, `price_per_branch`, `active_branch_count`, `subscription_amount`, `status`).
+2. **ORGANIZATION (Customer Tenant)**:
+   - Independent customer tenant using Store Management Systems.
+   - Logically isolated at database and server authorization level (`organization_id`).
 
 3. **OWNER (Organization Owner)**:
-   - Belongs to an Organization (`organization_id`).
-   - Creates and deletes individual Branches belonging exclusively to their Organization.
-   - Owner Dashboard displays: Organization Overview, Active Billable Branch Count, Branch Performance Breakdown, Date Range Filter, and Branch Filter.
-   - Manages staff users within their Organization.
+   - Administrator of one Organization.
+   - Manages Organization branches, staff accounts, roles & permissions.
+   - Views branch-wise sales and aggregated Organization sales.
 
-4. **BRANCHES / SHOPS**:
-   - Each Branch operates independently under its parent Organization (`shop_id = branch_id`, `organization_id`).
-   - Managers and Staff execute branch-specific operations (Billing/POS, Inventory, Customers, Ledgers, Reports, Settings).
+4. **BRANCH (POS Location)**:
+   - Physical/business store location operating POS billing and store services.
+   - Operates within `organization_id` and `shop_id` (branch) context.
+
+5. **STAFF / USERS**:
+   - Operates within permitted Organization and Branch scope.
+
+---
+
+## Scoped Settings Architecture
+STORE MANAGEMENT SYSTEMS enforces strict settings separation across three explicit scopes:
+
+1. **PLATFORM SETTINGS (`platform_settings` table)**:
+   - Access: Platform Admin only.
+   - Parameters: `platform_name`, `platform_logo`, `support_email`, `support_phone`, `default_currency`, `default_price_per_branch`, `session_timeout_minutes`, `auto_approval_hours`, `system_status`, `version`.
+   - Routes: `GET /api/settings/platform`, `PUT /api/settings/platform`.
+
+2. **ORGANIZATION SETTINGS (`organizations` table)**:
+   - Access: Organization Owner only.
+   - Parameters: Organization Name, Code, Owner Profile (Name, Email, Phone), Subscription Summary, Default Tax settings.
+   - Routes: `GET /api/settings/organization`, `PUT /api/settings/organization`.
+
+3. **BRANCH SETTINGS (`settings` & `shops` tables)**:
+   - Access: Branch Manager / Staff.
+   - Parameters: Branch Name, Address, Phone, GST/FSSAI, Logo, Tax Rate, Low Stock Threshold.
+   - Routes: `GET /api/settings/branch`, `PUT /api/settings/branch`.
+
+---
+
+## Server & Database Level Multi-Tenant Data Isolation
+- Tenant isolation is strictly enforced on every API request and database query (`SELECT ... WHERE organization_id = req.user.organization_id`).
+- Frontend hiding is NOT trusted as security; server-side middleware (`auth`) validates user and tenant active status on every request.
+- Cross-organization access (e.g. Owner A requesting Branch B or Sales B) is rejected with `403 Forbidden`.
 
 ---
 
 ## Subscription Model: Branch-Based Billing
 ```
-Organization Subscription Amount = Number of Active Billable Branches × Configured Price Per Branch
+Organization Subscription Amount = Active Billable Branches × Configured Branch Subscription Rate
 ```
-* **Billable Branch Definition**: ONLY `status = 'active'` branches count toward the active subscription amount. Deleted or inactive branches are non-billable and do NOT count toward current subscription quantity.
-* **Branch Creation Subscription Update**: Creating a new branch increments `active_branch_count` and recalculates total subscription amount.
-* **Branch Deletion Subscription Update**: Deleting/deactivating a branch decrements `active_branch_count` and recalculates total subscription amount. Remaining branches operate completely unaffected.
-* **Subscription Data Integrity**: Calculated strictly server-side from `shops` table.
+- Billable branches: ONLY `status = 'active'` branches count toward subscription quantity.
+- Creating a branch increments active branch count and updates total subscription amount.
+- Deleting a branch decrements active branch count and updates total subscription amount.
+- Historical billing and subscription records are safely retained.
 
 ---
 
-## Safe Soft-Deletion & Access Revocation Rules
-
-### 1. Organization Deletion (Admin)
-- Soft-deletion strategy (`status = 'deleted'`, `subscription_status = 'Cancelled'`).
-- CASCADE deactivates all branches belonging to the deleted Organization (`shops.status = 'deleted'`).
-- Immediately revokes access for Owner and all branch staff users (`users.status = 'disabled'`).
-- Requires explicit Admin confirmation in UI listing all affected branches and typing "DELETE".
-- Historical sales, invoices, payments, inventory logs, ledgers, audit logs, and reports remain safely preserved in DB.
-
-### 2. Individual Branch Deletion (Owner / Admin)
-- Soft-deletion strategy (`shops.status = 'deleted'`).
-- Owner can ONLY delete branches belonging to their own Organization (enforced server-side).
-- Disables staff assigned to the deleted branch (`users.status = 'disabled'`).
-- Automatically updates parent Organization's billable branch count and subscription quantity.
-- Other branches under the Organization continue operating normally.
-
-### 3. Session & API Security
-- Session authentication (`auth` middleware and login) verifies Organization and User status on every API call.
-- Access is immediately blocked if user or organization `status` is `'disabled'`, `'deleted'`, or `'inactive'`.
+## Responsive & Touch Architecture
+- Responsive viewports supported: 320px, 360px, 375px, 390px, 414px (Mobile), 768px, 820px, 1024px (Tablet), 1280px, 1366px, 1440px, 1920px (Desktop).
+- Touch target standard: minimum 44px height for interactive elements.
+- Fluid grid layout: 4 cards per row (Desktop) → 2 cards per row (Tablet) → 1 card stacked (Mobile).
+- Zero horizontal viewport scrolling on mobile screens.
 
 ---
 
-## Technology Stack
-* **Backend Runtime**: Node.js (v20.x)
-* **Web Framework**: Express.js (v4.18.2)
-* **Database**: Dual Engine Support
-  * Local / On-Prem: SQLite (`better-sqlite3` v9.4.3) with WAL mode
-  * Cloud / Production: Neon PostgreSQL (`pg` v8.22.0) with dynamic query translation
-* **Security & Optimization**: Helmet, CORS, Express Compression, Cookie Parser, Express Rate Limit, Bcryptjs, JsonWebToken (JWT)
-* **Desktop Wrapper**: Electron main process support (`electron/main.js`)
-* **Frontend**: HTML5, Vanilla JavaScript, CSS3, Service Worker (PWA capable)
-
----
-
-## Overall Architecture
-```
-d:/fun/
-├── context.md                            # Master application context & AI protocol
-├── ARCHITECTURE.md                       # Comprehensive architecture report
-├── BRANCHING.md                          # Git module-wise branching strategy
-├── server.js                             # Express application server
-├── db.js                                 # Direct database connection module
-├── index.html                            # Frontend SPA entry page
-├── script.js                             # Frontend SPA logic
-├── style.css                             # Application styling
-├── public/                               # Static distribution files
-│
-└── src/
-    ├── shared/
-    ├── routes/
-    └── modules/
-        ├── auth/                         # Authentication & Token management
-        ├── dashboard/                    # Admin, Owner & Branch dashboards
-        ├── organization/                 # Organization CRUD, Owner assignment & Subscriptions
-        ├── shops/                        # Branch/Shop management
-        ├── users/                        # Users, Staff & RBAC Roles
-        ├── inventory/                    # Items, Categories, Units & Stock logs
-        ├── customers/                    # Customers, Suppliers, People & Ledgers
-        ├── billing/                      # POS Bills, Purchases & Payments
-        ├── approvals/                    # Inter-shop & Manager approval workflow
-        ├── reports/                      # Financial analytics & Business reports
-        ├── settings/                     # Shop configurations & Tax settings
-        └── notifications/                # In-app notifications & Audit logging
-```
-
----
-
-## AI / Antigravity Development Protocol
-1. Read `/context.md` and module `context.md` before making changes.
-2. Maintain data isolation and branch-based subscription integrity.
-3. Preserve existing business rules and historical records during soft-deletions.
-4. Verify all changes through automated build, backend, authorization, and subscription tests.
+## AI & Developer Contribution Guidelines
+1. Always preserve tenant isolation on all server routes (`organization_id`).
+2. Maintain strict separation between Platform Settings, Organization Settings, and Branch Settings.
+3. Verify all changes using automated backend tests and responsive UI checks.

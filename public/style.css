@@ -1090,3 +1090,66 @@ tbody tr:last-child td {
     padding-bottom: 90px;
   }
 }
+
+/* ─── ENHANCED RESPONSIVE GRID & TOUCH RULES ─────────────────────────────── */
+body, html {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  
+  .form-row {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .modal-card {
+    width: 95% !important;
+    max-height: 92vh !important;
+    margin: 8px auto !important;
+    padding: 16px !important;
+  }
+
+  .pos-layout, .billing-grid, .cart-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .global-search-wrapper {
+    max-width: 130px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .content {
+    padding: 12px 10px 90px 10px !important;
+  }
+
+  .topbar {
+    padding: 0 10px !important;
+  }
+
+  .stat-card {
+    padding: 12px !important;
+  }
+
+  .stat-value {
+    font-size: 20px !important;
+  }
+
+  .btn-primary, .btn-secondary, .btn-danger, .sidebar-nav-item {
+    min-height: 44px !important;
+    touch-action: manipulation;
+  }
+}

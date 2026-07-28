@@ -174,3 +174,18 @@ CREATE TABLE IF NOT EXISTS organizations (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS platform_settings (
+    id TEXT PRIMARY KEY,
+    platform_name TEXT DEFAULT 'STORE MANAGEMENT SYSTEMS',
+    platform_logo TEXT DEFAULT 'logo.png',
+    support_email TEXT DEFAULT 'support@storemanagementsystems.com',
+    support_phone TEXT DEFAULT '+1-800-SMS-SaaS',
+    default_currency TEXT DEFAULT '₹',
+    default_price_per_branch REAL DEFAULT 999,
+    session_timeout_minutes INTEGER DEFAULT 15,
+    auto_approval_hours INTEGER DEFAULT 8,
+    system_status TEXT DEFAULT 'Operational',
+    version TEXT DEFAULT 'v2.5.0 SaaS Enterprise',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+

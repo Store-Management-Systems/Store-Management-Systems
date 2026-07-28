@@ -3,6 +3,7 @@ const { createOrganization, deleteOrganization, getOrganizations } = require('..
 const { createShop, deleteShop } = require('../src/modules/shops/controllers/shopController');
 
 async function runTests() {
+    await new Promise(r => setTimeout(r, 3000));
     console.log("==================================================");
     console.log("🧪 STARTING DELETION & SUBSCRIPTION TEST SUITE");
     console.log("==================================================\n");

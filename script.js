@@ -2939,22 +2939,175 @@ async function viewBill(id) {
 
 // ─── 9. Settings Section ──────────────────────────────────────────────────────
 async function renderSettings(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Settings...</div>`;
+
+  const role = currentUser ? currentUser.role : 'Staff';
+
+  // -------------------------------------------------------------
+  // 1. PLATFORM SETTINGS (Platform Admin Scope)
+  // -------------------------------------------------------------
+  if (role === 'Admin') {
+    try {
+      const res = await apiFetch('/settings/platform');
+      const ps = res.data || {};
+
+      c.innerHTML = `
+      <div class="fade-in">
+        <div class="card" style="background:linear-gradient(135deg, rgba(0,122,255,0.06), rgba(88,86,214,0.06));border:1px solid rgba(0,122,255,0.2);">
+          <h3 style="margin-bottom:6px;color:var(--ios-blue);">🌐 STORE MANAGEMENT SYSTEMS — Platform Settings</h3>
+          <div style="font-size:13px;color:var(--text-muted);">Configure global multi-tenant SaaS platform parameters, support contacts, and subscription pricing.</div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:14px;">🛠 General SaaS Platform Configuration</h3>
+          <div class="form-group">
+            <label class="form-label">Platform Name *</label>
+            <input type="text" id="psPlatformName" value="${ps.platform_name || 'STORE MANAGEMENT SYSTEMS'}">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Support Email</label>
+              <input type="email" id="psSupportEmail" value="${ps.support_email || 'support@storemanagementsystems.com'}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Support Phone</label>
+              <input type="tel" id="psSupportPhone" value="${ps.support_phone || '+1-800-SMS-SaaS'}">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Default SaaS Currency</label>
+              <select id="psDefaultCurrency">
+                ${['₹', '$', '€', '£', '¥', '₵'].map(curr => `<option ${(ps.default_currency || '₹') === curr ? 'selected' : ''}>${curr}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default Price Per Branch / Month</label>
+              <input type="number" id="psDefaultPricePerBranch" value="${ps.default_price_per_branch || 999}" min="0" step="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:14px;">🔒 Security, Session & Approval Rules</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Session Inactivity Timeout (Minutes)</label>
+              <input type="number" id="psSessionTimeout" value="${ps.session_timeout_minutes || 15}" min="1" max="1440">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Auto-Approval Expiry (Hours)</label>
+              <input type="number" id="psAutoApprovalHours" value="${ps.auto_approval_hours || 8}" min="1" max="72">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:14px;">ℹ Platform System Status & Build</h3>
+          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;font-size:13px;">
+            <div>System Engine Status: <span class="badge badge-success">${ps.system_status || 'Operational'}</span></div>
+            <div>Build Version: <strong>${ps.version || 'v2.5.0 SaaS Enterprise'}</strong></div>
+          </div>
+        </div>
+
+        <div class="card" style="border:1px solid rgba(255, 59, 48, 0.3);background:rgba(255, 59, 48, 0.03);">
+          <h3 style="color:var(--ios-red);margin-bottom:12px;">🚨 System Backups & Disaster Recovery</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn-secondary" style="padding:12px;" onclick="downloadBackup()">💾 Backup Database</button>
+            <button class="btn-secondary" style="padding:12px;" onclick="openRestoreModal()">📥 Restore Database</button>
+          </div>
+        </div>
+
+        <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="submitPlatformSettings()">💾 Save Platform Settings</button>
+      </div>`;
+      return;
+    } catch (err) {
+      c.innerHTML = `<div class="alert alert-warn">Failed to load Platform Settings: ${err.message}</div>`;
+      return;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 2. ORGANIZATION SETTINGS (Organization Owner Scope)
+  // -------------------------------------------------------------
+  if (role === 'Owner') {
+    try {
+      const res = await apiFetch('/settings/organization');
+      const org = res.data || {};
+
+      c.innerHTML = `
+      <div class="fade-in">
+        <div class="card" style="background:linear-gradient(135deg, rgba(52,199,89,0.06), rgba(0,122,255,0.06));border:1px solid rgba(52,199,89,0.2);">
+          <h3 style="margin-bottom:6px;color:var(--ios-green);">🏢 ${org.name || 'Organization Profile & Settings'}</h3>
+          <div style="font-size:13px;color:var(--text-muted);">Manage your Organization defaults, contact details, and branch management.</div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:14px;">🏢 Organization Details</h3>
+          <div class="form-group">
+            <label class="form-label">Organization Name *</label>
+            <input type="text" id="osOrgName" value="${org.name || ''}">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Contact Email</label>
+              <input type="email" id="osOrgEmail" value="${org.email || ''}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact Mobile</label>
+              <input type="tel" id="osOrgPhone" value="${org.phone || ''}">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:14px;">💳 Subscription Summary</h3>
+          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;font-size:13px;">
+            <div>Plan: <strong>${org.subscription_plan || 'Standard'}</strong></div>
+            <div>Status: <span class="badge badge-success">${org.subscription_status || 'Active'}</span></div>
+            <div>Active Branches: <strong>${org.active_branch_count || 1} Branch(es)</strong></div>
+            <div>Price Per Branch: <strong>${state.shop.currency}${org.price_per_branch || 999}</strong></div>
+            <div style="grid-column:span 2;font-size:15px;font-weight:800;color:var(--ios-green);">Total Subscription Amount: ${state.shop.currency}${fmtNum(org.subscription_amount, 0)}</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:12px;">🏢 Organization Administration</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn-secondary" style="padding:12px;" onclick="openCreateBranchModal()">📍 Create New Branch</button>
+            <button class="btn-secondary" style="padding:12px;" onclick="openStaffManagerModal()">👥 Manage Staff Users</button>
+            <button class="btn-secondary" style="padding:12px;grid-column:span 2;" onclick="openRoleManagerModal()">🔑 Roles & Permissions Matrix</button>
+          </div>
+        </div>
+
+        <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="submitOrganizationSettings()">💾 Save Organization Settings</button>
+      </div>`;
+      return;
+    } catch (err) {
+      c.innerHTML = `<div class="alert alert-warn">Failed to load Organization Settings: ${err.message}</div>`;
+      return;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 3. BRANCH SETTINGS (Branch Manager / Staff Scope)
+  // -------------------------------------------------------------
   c.innerHTML = `
   <div class="fade-in">
     <div class="card">
-      <h3 style="margin-bottom:14px;">🏪 Shop Profile & Settings</h3>
+      <h3 style="margin-bottom:14px;">📍 Branch Location & Profile Settings</h3>
 
       <div class="form-group" style="text-align:center;">
-        <label class="form-label">Shop Logo</label>
+        <label class="form-label">Branch Logo</label>
         <div class="logo-upload" onclick="document.getElementById('logoFile').click()">
           ${state.shop.logo ? `<img src="${state.shop.logo}" class="logo-preview" alt="logo">` : `<div style="font-size:36px;">SMS</div>`}
-          <div style="font-size:12px;color:var(--text-muted);">Tap to upload logo</div>
+          <div style="font-size:12px;color:var(--text-muted);">Tap to upload branch logo</div>
         </div>
         <input type="file" id="logoFile" accept="image/*" style="display:none;" onchange="uploadLogo(this)">
       </div>
 
       <div class="form-group">
-        <label class="form-label">Shop Name *</label>
+        <label class="form-label">Branch Name *</label>
         <input type="text" id="setName" value="${state.shop.name}">
       </div>
       <div class="form-group">
@@ -2974,7 +3127,7 @@ async function renderSettings(c) {
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:14px;">⚙ Financial & System Settings</h3>
+      <h3 style="margin-bottom:14px;">⚙ Branch Operational Defaults</h3>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Currency Symbol</label>
@@ -2993,31 +3146,47 @@ async function renderSettings(c) {
       </div>
     </div>
 
-    <!-- Enterprise Management Cards -->
-    <div class="card">
-      <h3 style="margin-bottom:12px;">🏢 Branch & Enterprise Administration</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        ${currentUser && currentUser.role === 'Admin' ? `<button class="btn-secondary" style="padding:12px;grid-column:span 2;background:rgba(0,122,255,0.08);color:var(--ios-blue);font-weight:700;" onclick="openOrganizationsModal()">🏢 Manage Organizations & Owners</button>` : ''}
-        <button class="btn-secondary" style="padding:12px;" onclick="openBranchManagerModal()">🏢 Manage Branches</button>
-        <button class="btn-secondary" style="padding:12px;" onclick="openRoleManagerModal()">🔑 Manage Roles & RBAC</button>
-        <button class="btn-secondary" style="padding:12px;" onclick="openStaffManagerModal()">👥 Staff & Users</button>
-        <button class="btn-secondary" style="padding:12px;" onclick="openAuditLogsModal()">📋 System Audit Logs</button>
-      </div>
-    </div>
-
-    ${currentUser && currentUser.role === 'Admin' ? `
-    <!-- Super Admin Danger Zone -->
-    <div class="card" style="border:1px solid rgba(255, 59, 48, 0.3);background:rgba(255, 59, 48, 0.03);">
-      <h3 style="color:var(--ios-red);margin-bottom:12px;">🚨 Super Admin Danger Zone & Backups</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <button class="btn-secondary" style="padding:12px;" onclick="downloadBackup()">💾 Backup Database</button>
-        <button class="btn-secondary" style="padding:12px;" onclick="openRestoreModal()">📥 Restore Database</button>
-      </div>
-      <button class="btn-danger" style="width:100%;margin-top:12px;padding:12px;" onclick="openDeleteAllDataModal()">⚠️ Delete All Data (Requires 3 Passwords)</button>
-    </div>` : ''}
-
-    <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="saveSettingsSubmit()">💾 Save All Settings</button>
+    <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="saveSettingsSubmit()">💾 Save Branch Settings</button>
   </div>`;
+}
+
+async function submitPlatformSettings() {
+  const platform_name = document.getElementById('psPlatformName').value.trim();
+  const support_email = document.getElementById('psSupportEmail').value.trim();
+  const support_phone = document.getElementById('psSupportPhone').value.trim();
+  const default_currency = document.getElementById('psDefaultCurrency').value;
+  const default_price_per_branch = parseFloat(document.getElementById('psDefaultPricePerBranch').value) || 999;
+  const session_timeout_minutes = parseInt(document.getElementById('psSessionTimeout').value) || 15;
+  const auto_approval_hours = parseInt(document.getElementById('psAutoApprovalHours').value) || 8;
+
+  try {
+    const res = await apiFetch('/settings/platform', {
+      method: 'PUT',
+      body: JSON.stringify({
+        platform_name, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours
+      })
+    });
+    if (res.success) {
+      toast('✅ SaaS Platform Settings updated successfully');
+    }
+  } catch (e) { alert(e.message || 'Failed to update platform settings'); }
+}
+
+async function submitOrganizationSettings() {
+  const name = document.getElementById('osOrgName').value.trim();
+  const email = document.getElementById('osOrgEmail').value.trim();
+  const phone = document.getElementById('osOrgPhone').value.trim();
+
+  try {
+    const res = await apiFetch('/settings/organization', {
+      method: 'PUT',
+      body: JSON.stringify({ name, email, phone })
+    });
+    if (res.success) {
+      toast('✅ Organization Settings updated successfully');
+    }
+  } catch (e) { alert(e.message || 'Failed to update organization settings'); }
+}
 }
 
 function uploadLogo(input) {

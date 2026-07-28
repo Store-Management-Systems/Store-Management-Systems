@@ -290,6 +290,25 @@ async function initNeonDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS platform_settings (
+                id VARCHAR(50) PRIMARY KEY,
+                platform_name VARCHAR(150) DEFAULT 'STORE MANAGEMENT SYSTEMS',
+                platform_logo TEXT DEFAULT 'logo.png',
+                support_email VARCHAR(150) DEFAULT 'support@storemanagementsystems.com',
+                support_phone VARCHAR(50) DEFAULT '+1-800-SMS-SaaS',
+                default_currency VARCHAR(10) DEFAULT '₹',
+                default_price_per_branch NUMERIC DEFAULT 999,
+                session_timeout_minutes INT DEFAULT 15,
+                auto_approval_hours INT DEFAULT 8,
+                system_status VARCHAR(50) DEFAULT 'Operational',
+                version VARCHAR(50) DEFAULT 'v2.5.0 SaaS Enterprise',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
+            ON CONFLICT (id) DO NOTHING;
         `);
 
         // Safely alter existing tables for schema upgrades
