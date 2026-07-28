@@ -181,7 +181,7 @@ async function checkAuth() {
       try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
       if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
-        try { openMultiBranchLoginModal(); } catch (err) {}
+        try { openMultiBranchLoginModal(); } catch (err) { }
       }
     }
   } catch (e) {
@@ -260,7 +260,7 @@ async function handleLoginSubmit(e) {
       }
 
       if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
-        try { openMultiBranchLoginModal(); } catch (err) {}
+        try { openMultiBranchLoginModal(); } catch (err) { }
       }
     } else {
       if (loginCard) {
@@ -287,7 +287,7 @@ async function handleLogout() {
   if (!confirm('Are you sure you want to log out?')) return;
   try {
     await apiFetch('/auth/logout', { method: 'POST' });
-  } catch (e) {}
+  } catch (e) { }
   handleUnauthorized();
   toast('Logged out');
 }
@@ -309,7 +309,7 @@ async function loadAdminShops() {
       `).join('');
       document.getElementById('topbarAdminShopSelect').style.display = 'block';
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function loadMultiBranchDropdown() {
@@ -597,11 +597,11 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
               </thead>
               <tbody>
                 ${orgs.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">No organizations created yet</td></tr>' :
-                  orgs.map(o => {
-                    const activeCount = o.active_branches_count !== undefined ? o.active_branches_count : o.branches_count;
-                    const pricePerBranch = o.price_per_branch || 999;
-                    const subAmount = activeCount * pricePerBranch;
-                    return `
+          orgs.map(o => {
+            const activeCount = o.active_branches_count !== undefined ? o.active_branches_count : o.branches_count;
+            const pricePerBranch = o.price_per_branch || 999;
+            const subAmount = activeCount * pricePerBranch;
+            return `
                     <tr>
                       <td style="font-weight:700;">${o.name}</td>
                       <td><code>${o.code}</code></td>
@@ -625,8 +625,8 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                       </td>
                     </tr>
                     `;
-                  }).join('')
-                }
+          }).join('')
+        }
               </tbody>
             </table>
           </div>
@@ -709,7 +709,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
               </thead>
               <tbody>
                 ${perf.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No branches created yet</td></tr>' :
-                  perf.map(b => `
+          perf.map(b => `
                     <tr>
                       <td style="font-weight:700;font-size:15px;color:var(--text-primary);">${b.branch_name}</td>
                       <td><code>${b.branch_code}</code></td>
@@ -724,7 +724,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                       </td>
                     </tr>
                   `).join('')
-                }
+        }
               </tbody>
             </table>
           </div>
@@ -833,7 +833,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
       <div class="card">
         <div class="card-header"><h3>Recent Invoices & Bills</h3></div>
         ${!stats.recentBills || stats.recentBills.length === 0 ? '<div class="empty-state" style="padding:20px"><p>No bills generated yet</p></div>' :
-          stats.recentBills.map(b => `
+        stats.recentBills.map(b => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
               <div>
                 <div style="font-size:14px;font-weight:700;">#${b.bill_number || b.billNo} <span class="badge ${b.due_amount > 0 ? 'badge-partial' : 'badge-paid'}">${b.payment_status || 'Paid'}</span></div>
@@ -845,7 +845,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
               </div>
             </div>
           `).join('')
-        }
+      }
       </div>
     </div>`;
   } catch (err) {
@@ -865,7 +865,7 @@ async function renderPeopleSection(c, forceTab = null) {
   try {
     const res = await apiFetch(`/people?category=${peopleCategoryTab}&search=${encodeURIComponent(peopleSearchQuery)}`);
     if (res.success) state.people = res.data || [];
-  } catch (e) {}
+  } catch (e) { }
 
   c.innerHTML = `
   <div class="fade-in">
@@ -1072,7 +1072,7 @@ async function openLedgerModal(personId) {
           </thead>
           <tbody>
             ${entries.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No ledger transaction entries yet</td></tr>' :
-              entries.map(e => `
+        entries.map(e => `
                 <tr>
                   <td>${formatDate(e.created_at)}</td>
                   <td><strong>${e.entry_type}</strong><br><span style="font-size:10px;color:var(--text-muted);">${e.notes || ''}</span></td>
@@ -1081,7 +1081,7 @@ async function openLedgerModal(personId) {
                   <td class="text-balance">${state.shop.currency}${fmtNum(e.running_balance, 2)}</td>
                 </tr>
               `).join('')
-            }
+      }
           </tbody>
         </table>
       </div>
@@ -1100,7 +1100,7 @@ async function openRecordPaymentModal(personId) {
     try {
       const res = await apiFetch(`/people/${personId}`);
       if (res.success) person = res.data;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   showModal('💳 Record Financial Payment / Collection', `
@@ -1298,7 +1298,7 @@ async function renderAnalytics(c) {
       <div class="card">
         <div class="card-header"><h3>🏆 Top Revenue B2B / B2C Customers</h3></div>
         ${!topCustomers || topCustomers.length === 0 ? '<div class="empty-state" style="padding:16px;"><p>No sales records yet</p></div>' :
-          topCustomers.map(tc => `
+        topCustomers.map(tc => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
               <div>
                 <div style="font-weight:700;">${tc.name}</div>
@@ -1307,13 +1307,13 @@ async function renderAnalytics(c) {
               <div style="font-weight:800;color:var(--ios-green);">${state.shop.currency}${fmtNum(tc.total_revenue, 2)}</div>
             </div>
           `).join('')
-        }
+      }
       </div>
 
       <div class="card">
         <div class="card-header"><h3>🚚 Top Restock Suppliers</h3></div>
         ${!topSuppliers || topSuppliers.length === 0 ? '<div class="empty-state" style="padding:16px;"><p>No restock purchases yet</p></div>' :
-          topSuppliers.map(ts => `
+        topSuppliers.map(ts => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
               <div>
                 <div style="font-weight:700;">${ts.name} (${ts.business_name || 'Supplier'})</div>
@@ -1322,7 +1322,7 @@ async function renderAnalytics(c) {
               <div style="font-weight:800;color:var(--ios-purple);">${state.shop.currency}${parseFloat(ts.total_purchased || 0).toFixed(2)}</div>
             </div>
           `).join('')
-        }
+      }
       </div>
     </div>`;
   } catch (err) {
@@ -1439,7 +1439,7 @@ async function renderBillingDashboard(container) {
         </div>
 
         ${bills.length === 0 ? '<div class="empty-state" style="padding:30px;"><p>No billing invoices found</p></div>' :
-          bills.map(b => `
+        bills.map(b => `
             <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);${b.status === 'Cancelled' ? 'opacity:0.6;' : ''}">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
                 <div>
@@ -1472,7 +1472,7 @@ async function renderBillingDashboard(container) {
               </div>
             </div>
           `).join('')
-        }
+      }
       </div>
     `;
   } catch (err) {
@@ -1484,7 +1484,7 @@ async function renderPOSBilling(c) {
   try {
     const res = await apiFetch('/items');
     if (res.success) state.items = res.data || [];
-  } catch (e) {}
+  } catch (e) { }
 
   const filteredItems = state.items.filter(i => {
     const matchSearch = i.name.toLowerCase().includes(billSearchQuery.toLowerCase());
@@ -1546,10 +1546,10 @@ async function renderPOSBilling(c) {
 
       <div style="max-height:320px;overflow-y:auto;padding-right:2px;" id="posItemsList">
         ${filteredItems.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No items found in inventory.</div>' :
-          filteredItems.map(i => {
-            const inCart = billCart.find(c => c.itemId === i.id);
-            const cartQty = inCart ? inCart.qty : 0;
-            return `
+      filteredItems.map(i => {
+        const inCart = billCart.find(c => c.itemId === i.id);
+        const cartQty = inCart ? inCart.qty : 0;
+        return `
               <div class="bill-item-card ${cartQty > 0 ? 'selected' : ''}">
                 <div class="stock-icon">📦</div>
                 <div class="bill-item-info">
@@ -1566,8 +1566,8 @@ async function renderPOSBilling(c) {
                 </div>
               </div>
             `;
-          }).join('')
-        }
+      }).join('')
+    }
       </div>
     </div>
 
@@ -2352,8 +2352,8 @@ async function openReceivableDrilldownModal(type = 'all') {
 
     const totalDueSum = bills.reduce((sum, b) => sum + parseFloat(b.due_amount || 0), 0);
     const title = type === 'customer' ? 'Customer Outstanding Receivables' :
-                  type === 'party' ? 'B2B Party Outstanding Receivables' :
-                  type === 'overdue' ? 'Overdue Invoices (>30 Days)' : 'Total Outstanding Receivables';
+      type === 'party' ? 'B2B Party Outstanding Receivables' :
+        type === 'overdue' ? 'Overdue Invoices (>30 Days)' : 'Total Outstanding Receivables';
 
     showModal(`📈 ${title} (${bills.length})`, `
       <div class="fade-in">
@@ -2367,7 +2367,7 @@ async function openReceivableDrilldownModal(type = 'all') {
 
         <div style="max-height:360px;overflow-y:auto;">
           ${bills.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted);">No outstanding invoices found! 🎉</div>' :
-            bills.map(b => `
+        bills.map(b => `
               <div class="card" style="margin-bottom:8px;padding:10px;border:1px solid var(--border-light);">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                   <div>
@@ -2385,7 +2385,7 @@ async function openReceivableDrilldownModal(type = 'all') {
                 </div>
               </div>
             `).join('')
-          }
+      }
         </div>
       </div>
     `);
@@ -2422,12 +2422,12 @@ function buildReceipt(bill) {
     } else if (bill.split_payments) {
       splitModes = bill.split_payments;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return `
     <div class="receipt">
       <div class="receipt-center">
-        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">${b.name.substring(0,3).toUpperCase()}</div>`}
+        ${b.logo ? `<img src="${b.logo}" class="receipt-logo" alt="logo">` : `<div class="receipt-logo-placeholder">${b.name.substring(0, 3).toUpperCase()}</div>`}
         <div style="font-weight:700;font-size:15px;">${b.name}</div>
         ${b.tagline ? `<div style="font-size:11px;">${b.tagline}</div>` : ''}
         ${b.address ? `<div style="font-size:10px;">${b.address}</div>` : ''}
@@ -3308,7 +3308,7 @@ async function updateApprovalBadge() {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function openApprovalsModal(tab = 'pending') {
@@ -3340,22 +3340,22 @@ async function openApprovalsModal(tab = 'pending') {
 
         <div style="max-height:380px;overflow-y:auto;">
           ${currentList.length === 0 ? `<div class="empty-state" style="padding:24px;"><p>No ${approvalTab === 'pending' ? 'In Process' : approvalTab} requests found</p></div>` :
-            currentList.map(app => {
-              const autoTime = new Date(app.auto_approve_at);
-              const now = new Date();
-              const diffMs = autoTime - now;
-              let timeStr = 'Auto-approved';
-              if (app.status === 'pending') {
-                if (diffMs > 0) {
-                  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                  const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                  timeStr = `Auto-approves in ${hours}h ${mins}m`;
-                } else {
-                  timeStr = 'Auto-approval due';
-                }
-              }
+        currentList.map(app => {
+          const autoTime = new Date(app.auto_approve_at);
+          const now = new Date();
+          const diffMs = autoTime - now;
+          let timeStr = 'Auto-approved';
+          if (app.status === 'pending') {
+            if (diffMs > 0) {
+              const hours = Math.floor(diffMs / (1000 * 60 * 60));
+              const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+              timeStr = `Auto-approves in ${hours}h ${mins}m`;
+            } else {
+              timeStr = 'Auto-approval due';
+            }
+          }
 
-              return `
+          return `
                 <div class="card" style="margin-bottom:10px;padding:12px;border:1px solid var(--border-light);background:#fff;">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                     <div>
@@ -3374,8 +3374,8 @@ async function openApprovalsModal(tab = 'pending') {
                   ` : ''}
                 </div>
               `;
-            }).join('')
-          }
+        }).join('')
+      }
         </div>
       </div>
     `;
@@ -3422,7 +3422,7 @@ async function openOrganizationsModal() {
       <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateOrganizationModal()">➕ Create New Organization</button>
       <div style="max-height:360px;overflow-y:auto;">
         ${orgs.length === 0 ? '<div class="empty-state" style="padding:20px;"><p>No organizations created yet</p></div>' :
-          orgs.map(o => `
+        orgs.map(o => `
             <div style="padding:12px;border:1px solid var(--border-light);border-radius:10px;margin-bottom:10px;background:#ffffff;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div>
@@ -3436,7 +3436,7 @@ async function openOrganizationsModal() {
               </div>
             </div>
           `).join('')
-        }
+      }
       </div>
     `;
 
@@ -3467,7 +3467,7 @@ function openCreateOrganizationModal() {
       </div>
       <div class="form-group">
         <label class="form-label">Subscription Expiry Date</label>
-        <input type="date" id="orgSubExpiry" value="${new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0]}">
+        <input type="date" id="orgSubExpiry" value="${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}">
       </div>
     </div>
 
@@ -3657,20 +3657,20 @@ async function openOrganizationDetailsModal(id) {
           </thead>
           <tbody>
             ${breakdown.length === 0 ? '<tr><td colspan="4" style="text-align:center;">No branches registered</td></tr>' :
-              breakdown.map(b => `
+        breakdown.map(b => `
                 <tr>
                   <td style="font-weight:700;">${b.name}</td>
                   <td><code>${b.code}</code></td>
                   <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status.toUpperCase()}</span></td>
                   <td>
                     ${b.is_billable ?
-                      `<span class="badge badge-success">✓ Active (Billable)</span>` :
-                      `<span class="badge badge-secondary">✗ Inactive/Deleted (Non-Billable)</span>`
-                    }
+            `<span class="badge badge-success">✓ Active (Billable)</span>` :
+            `<span class="badge badge-secondary">✗ Inactive/Deleted (Non-Billable)</span>`
+          }
                   </td>
                 </tr>
               `).join('')
-            }
+      }
           </tbody>
         </table>
       </div>
@@ -3698,8 +3698,8 @@ async function confirmDeleteOrganizationModal(id, name) {
         <div style="font-weight:700;font-size:13px;margin-bottom:6px;">📍 Affected Branches (${branches.length}):</div>
         <div style="max-height:120px;overflow-y:auto;background:#f9f9f9;padding:10px;border-radius:8px;border:1px solid var(--border-light);">
           ${branches.length === 0 ? '<div style="font-size:12px;color:var(--text-muted);">No active branches</div>' :
-            branches.map(b => `<div style="font-size:12px;font-weight:600;padding:2px 0;">• ${b.shop_name || b.name} (${b.shop_code})</div>`).join('')
-          }
+        branches.map(b => `<div style="font-size:12px;font-weight:600;padding:2px 0;">• ${b.shop_name || b.name} (${b.shop_code})</div>`).join('')
+      }
         </div>
       </div>
 
@@ -3845,7 +3845,7 @@ async function openUsersModal() {
       <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateUserModal('${allPerms.join(',')}')">➕ Add New User / Staff</button>
       <div style="max-height:360px;overflow-y:auto;">
         ${users.length === 0 ? '<p style="text-align:center;padding:20px;">No user accounts found</p>' :
-          users.map(u => `
+        users.map(u => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--border-light);border-radius:10px;margin-bottom:10px;background:#ffffff;">
               <div>
                 <div style="font-weight:700;font-size:14px;color:var(--text-primary);">${u.name} (@${u.username})</div>
@@ -3864,7 +3864,7 @@ async function openUsersModal() {
               </div>
             </div>
           `).join('')
-        }
+      }
       </div>
     `);
   } catch (e) {
@@ -4015,7 +4015,7 @@ async function openCreateUserModal(permsCsv) {
       ]);
       orgs = orgRes.data || [];
       shops = shopRes.data || [];
-    } catch (e) {}
+    } catch (e) { }
   }
 
   showModal('Create User Account', `
@@ -4177,7 +4177,7 @@ async function openCreateShopModal() {
     try {
       const res = await apiFetch('/organizations');
       orgs = res.data || [];
-    } catch (e) {}
+    } catch (e) { }
   }
 
   showModal('Add New Shop Branch', `
@@ -4314,14 +4314,14 @@ async function openAuditLogsModal() {
     showModal('📋 System Audit Logs', `
       <div style="max-height:380px;overflow-y:auto;">
         ${logs.length === 0 ? '<p style="text-align:center;padding:20px;">No audit logs recorded yet</p>' :
-          logs.map(l => `
+        logs.map(l => `
             <div class="log-entry" style="font-size:12px;margin-bottom:8px;">
               <div style="font-weight:700;color:var(--text-primary);">${l.action} <span style="font-weight:400;color:var(--text-muted);">by ${l.user_name || l.username || 'System'}</span></div>
               <div style="color:var(--text-secondary);margin-top:2px;">${l.details || ''}</div>
               <div style="font-size:10px;color:var(--text-light);margin-top:2px;">${formatDateFull(l.created_at)}</div>
             </div>
           `).join('')
-        }
+      }
       </div>
     `);
   } catch (e) {
