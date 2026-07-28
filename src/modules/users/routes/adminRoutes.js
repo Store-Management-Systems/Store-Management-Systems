@@ -1,0 +1,11 @@
+const express = require('express');
+const router = express.Router();
+const adminController = require('../controllers/adminController');
+const { authenticate, checkPermission } = require('../../../shared');
+
+router.get('/audit-logs', authenticate, checkPermission('Settings'), adminController.getAuditLogs);
+router.get('/backup', authenticate, checkPermission('Settings'), adminController.exportBackup);
+router.post('/restore', authenticate, checkPermission('Settings'), adminController.restoreBackup);
+router.post('/delete-all-data', authenticate, checkPermission('Settings'), adminController.deleteAllData);
+
+module.exports = router;

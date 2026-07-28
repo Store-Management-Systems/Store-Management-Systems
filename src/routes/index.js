@@ -1,0 +1,47 @@
+const express = require('express');
+const router = express.Router();
+
+const authModule = require('../modules/auth');
+const dashboardModule = require('../modules/dashboard');
+const organizationModule = require('../modules/organization');
+const shopsModule = require('../modules/shops');
+const usersModule = require('../modules/users');
+const inventoryModule = require('../modules/inventory');
+const customersModule = require('../modules/customers');
+const billingModule = require('../modules/billing');
+const approvalsModule = require('../modules/approvals');
+const reportsModule = require('../modules/reports');
+const settingsModule = require('../modules/settings');
+const notificationsModule = require('../modules/notifications');
+
+router.use('/auth', authModule.routes);
+router.use('/dashboard', dashboardModule.routes);
+router.use('/organizations', organizationModule.routes);
+router.use('/shops', shopsModule.routes);
+
+router.use('/users', usersModule.routes.users);
+router.use('/roles', usersModule.routes.roles);
+router.use('/admin', usersModule.routes.admin);
+
+router.use('/items', inventoryModule.routes.items);
+router.use('/categories', inventoryModule.routes.categories);
+router.use('/units', inventoryModule.routes.units);
+router.use('/stock', inventoryModule.routes.stock);
+
+router.use('/customers', customersModule.routes.customers);
+router.use('/people', customersModule.routes.people);
+router.use('/ledgers', customersModule.routes.ledgers);
+
+router.use('/bills', billingModule.routes.bills);
+router.use('/purchases', billingModule.routes.purchases);
+router.use('/payments', billingModule.routes.payments);
+
+router.use('/approvals', approvalsModule.routes);
+
+router.use('/reports', reportsModule.routes.reports);
+router.use('/analytics', reportsModule.routes.analytics);
+
+router.use('/settings', settingsModule.routes);
+router.use('/notifications', notificationsModule.routes);
+
+module.exports = router;

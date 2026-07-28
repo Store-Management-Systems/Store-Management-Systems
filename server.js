@@ -9,10 +9,10 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 // Initialize Database & Migration
-require('./database/init');
+require('./src/shared/database/init');
 
-const apiRoutes = require('./routes');
-const { notFoundHandler, globalErrorHandler } = require('./middleware/errorHandler');
+const apiRoutes = require('./src/routes');
+const { notFoundHandler, globalErrorHandler } = require('./src/shared/middleware/errorHandler');
 
 const app = express();
 
