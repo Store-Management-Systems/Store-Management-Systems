@@ -43,14 +43,15 @@ async function runRoleLoginTests() {
     // -------------------------------------------------------------
     console.log("--- TEST 2: OWNER CREATION & OWNER LOGIN ---");
     const adminUser = adminRes.responseData?.data?.user;
+    const testOrgCode = 'RTO-' + Date.now();
     const createOrgReq = {
         user: { id: adminUser.id, role: 'Admin' },
         body: {
             name: 'Role Test Organization',
-            code: 'RTO-001',
+            code: testOrgCode,
             price_per_branch: 999,
             owner_name: 'Test Owner',
-            owner_username: 'test_owner_rto',
+            owner_username: 'test_owner_' + Date.now(),
             owner_password: 'password123'
         }
     };
@@ -59,9 +60,10 @@ async function runRoleLoginTests() {
 
     const orgId = createOrgRes.responseData?.data?.id;
     const ownerId = createOrgRes.responseData?.data?.owner_id;
+    const ownerUsername = createOrgReq.body.owner_username;
 
     // Login as Owner
-    const ownerReq = { body: { username: 'test_owner_rto', password: 'password123' } };
+    const ownerReq = { body: { username: ownerUsername, password: 'password123' } };
     const ownerRes = resHelper();
     await login(ownerReq, ownerRes);
 
@@ -79,14 +81,15 @@ async function runRoleLoginTests() {
     console.log("--- TEST 3: BRANCH / STAFF LOGIN ---");
     // Create staff user for HQ branch
     const staffPassHash = bcrypt.hashSync('password123', 10);
-    const staffId = 'usr_test_staff';
+    const staffId = 'usr_staff_' + Date.now();
+    const staffUsername = 'staff_' + Date.now();
     await db.prepare(`
         INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, organization_id, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO NOTHING
-    `).run(staffId, 'Test Staff', 'test_staff_user', 'staff@store.com', 'password123', staffPassHash, 'Staff', 'shop_default_hq', orgId, 'active');
+    `).run(staffId, 'Test Staff', staffUsername, 'staff@store.com', 'password123', staffPassHash, 'Staff', 'shop_default_hq', orgId, 'active');
 
-    const staffReq = { body: { username: 'test_staff_user', password: 'password123' } };
+    const staffReq = { body: { username: staffUsername, password: 'password123' } };
     const staffRes = resHelper();
     await login(staffReq, staffRes);
 
@@ -123,8 +126,8 @@ async function runRoleLoginTests() {
         user: { id: adminUser.id, role: 'Admin' },
         body: {
             name: 'Isolated Org B',
-            code: 'RTO-002',
-            owner_username: 'isolated_owner_b',
+            code: 'RTO-B-' + Date.now(),
+            owner_username: 'isolated_owner_b_' + Date.now(),
             owner_password: 'password123'
         }
     };
@@ -137,7 +140,7 @@ async function runRoleLoginTests() {
     // Attempt to delete Org B's branch using Owner A credentials
     const unauthorizedDelReq = {
         user: { id: ownerId, role: 'Owner', organization_id: orgId },
-        params: { id: orgBShop.id }
+        params: { id: orgBShop ? orgBShop.id : 'shp_invalid' }
     };
     const unauthorizedDelRes = resHelper();
     await deleteShop(unauthorizedDelReq, unauthorizedDelRes);

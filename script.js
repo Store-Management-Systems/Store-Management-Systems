@@ -1,6 +1,8 @@
-const API_URL = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin === 'null' || !window.location.origin))
-  ? 'http://localhost:3000/api'
-  : '/api';
+const API_URL = (typeof window !== 'undefined' && window.SMS_API_URL)
+  ? window.SMS_API_URL
+  : (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin === 'null' || !window.location.origin || (window.location.port && window.location.port !== '3000')))
+    ? 'http://localhost:3000/api'
+    : '/api';
 
 let currentUser = null;
 let activeShopId = null;
@@ -83,7 +85,15 @@ async function apiFetch(endpoint, options = {}) {
 
   try {
     const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
-    const data = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    let data;
+
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Server connection error (${response.status}): ${text.substring(0, 120)}`);
+    }
 
     if (response.status === 401) {
       if (endpoint !== '/auth/login') {
