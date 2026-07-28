@@ -138,6 +138,9 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('organizations', 'subscription_status', "TEXT DEFAULT 'Active'");
     addColIfMissing('organizations', 'subscription_start', 'DATETIME');
     addColIfMissing('organizations', 'subscription_expiry', 'DATETIME');
+    addColIfMissing('organizations', 'price_per_branch', 'REAL DEFAULT 999');
+    addColIfMissing('organizations', 'active_branch_count', 'INTEGER DEFAULT 0');
+    addColIfMissing('organizations', 'subscription_amount', 'REAL DEFAULT 0');
 
     try {
         sqliteDb.exec(`

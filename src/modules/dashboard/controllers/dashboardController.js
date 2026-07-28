@@ -1,4 +1,5 @@
 const { db, success, error } = require('../../../shared');
+const { recalculateOrganizationSubscription } = require('../../organization/controllers/organizationController');
 
 const getDashboardStats = async (req, res) => {
     try {
@@ -22,11 +23,15 @@ const getDashboardStats = async (req, res) => {
 
             const enrichedOrgs = [];
             for (const org of orgs) {
-                const branchCountRes = await db.prepare("SELECT COUNT(*) as count FROM shops WHERE organization_id = ? AND status != 'deleted'").get(org.id);
+                await recalculateOrganizationSubscription(org.id);
+                const freshOrg = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(org.id);
+
+                const allBranches = await db.prepare("SELECT id, name, shop_name, shop_code, status, created_at FROM shops WHERE organization_id = ? ORDER BY created_at DESC").all(org.id);
+                const activeBranches = allBranches.filter(b => b.status === 'active');
                 
-                let subStatus = org.subscription_status || 'Active';
-                if (org.subscription_expiry) {
-                    const expDate = new Date(org.subscription_expiry);
+                let subStatus = freshOrg.subscription_status || 'Active';
+                if (freshOrg.subscription_expiry) {
+                    const expDate = new Date(freshOrg.subscription_expiry);
                     const daysRemaining = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
                     if (daysRemaining < 0) {
                         subStatus = 'Expired';
@@ -43,15 +48,28 @@ const getDashboardStats = async (req, res) => {
                 }
 
                 let ownerUser = null;
-                if (org.owner_id) {
-                    ownerUser = await db.prepare("SELECT id, name, username, email FROM users WHERE id = ?").get(org.owner_id);
+                if (freshOrg.owner_id) {
+                    ownerUser = await db.prepare("SELECT id, name, username, email FROM users WHERE id = ?").get(freshOrg.owner_id);
                 }
 
+                const pricePerBranch = parseFloat(freshOrg.price_per_branch || 999);
+                const subAmount = activeBranches.length * pricePerBranch;
+
                 enrichedOrgs.push({
-                    ...org,
+                    ...freshOrg,
                     subscription_status: subStatus,
-                    branches_count: parseInt(branchCountRes?.count || 0),
-                    owner: ownerUser || { id: org.owner_id, name: org.owner_name || 'Unassigned', username: 'N/A' }
+                    branches_count: allBranches.filter(b => b.status !== 'deleted').length,
+                    active_branches_count: activeBranches.length,
+                    price_per_branch: pricePerBranch,
+                    subscription_amount: subAmount,
+                    owner: ownerUser || { id: freshOrg.owner_id, name: freshOrg.owner_name || 'Unassigned', username: 'N/A' },
+                    branches_breakdown: allBranches.map(b => ({
+                        id: b.id,
+                        name: b.shop_name || b.name,
+                        code: b.shop_code,
+                        status: b.status,
+                        is_billable: b.status === 'active'
+                    }))
                 });
             }
 
@@ -84,6 +102,7 @@ const getDashboardStats = async (req, res) => {
         if (role === 'Owner') {
             let org = null;
             if (userOrgId) {
+                await recalculateOrganizationSubscription(userOrgId);
                 org = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(userOrgId);
             }
 
@@ -151,13 +170,24 @@ const getDashboardStats = async (req, res) => {
                 });
             }
 
+            const activeBranchCount = branches.filter(b => b.status === 'active').length;
+            const pricePerBranch = parseFloat(org?.price_per_branch || 999);
+            const subscriptionAmount = activeBranchCount * pricePerBranch;
+
             return success(res, 'Owner organization dashboard loaded', {
                 mode: 'Owner',
-                organization: org || { name: 'My Organization', code: 'ORG' },
+                organization: org ? {
+                    ...org,
+                    active_branches_count: activeBranchCount,
+                    price_per_branch: pricePerBranch,
+                    subscription_amount: subscriptionAmount
+                } : { name: 'My Organization', code: 'ORG', active_branches_count: activeBranchCount, price_per_branch: pricePerBranch, subscription_amount: subscriptionAmount },
                 summary: {
                     totalSales: totalOrgSales,
                     totalBills: totalOrgBills,
-                    totalBranches: branches.length
+                    totalBranches: branches.length,
+                    activeBranches: activeBranchCount,
+                    subscriptionAmount: subscriptionAmount
                 },
                 branchPerformance,
                 filter: {

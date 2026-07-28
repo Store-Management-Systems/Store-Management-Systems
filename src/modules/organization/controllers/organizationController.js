@@ -3,6 +3,26 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../../notifications/services/auditService');
 
+const recalculateOrganizationSubscription = async (orgId) => {
+    if (!orgId) return null;
+    const activeRes = await db.prepare("SELECT COUNT(*) as count FROM shops WHERE organization_id = ? AND status = 'active'").get(orgId);
+    const activeCount = parseInt(activeRes?.count || 0);
+
+    const org = await db.prepare("SELECT price_per_branch FROM organizations WHERE id = ?").get(orgId);
+    const pricePerBranch = parseFloat(org?.price_per_branch || 999);
+    const totalAmount = activeCount * pricePerBranch;
+
+    await db.prepare(`
+        UPDATE organizations SET
+            active_branch_count = ?,
+            subscription_amount = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    `).run(activeCount, totalAmount, orgId);
+
+    return { active_branch_count: activeCount, price_per_branch: pricePerBranch, subscription_amount: totalAmount };
+};
+
 const getOrganizations = async (req, res) => {
     try {
         let orgs = [];
@@ -13,19 +33,33 @@ const getOrganizations = async (req, res) => {
             orgs = await db.prepare("SELECT * FROM organizations WHERE (owner_id = ? OR id = ?) AND status != 'deleted'").all(req.user.id, orgId);
         }
 
-        // Attach branches count and owner information
         const enrichedOrgs = [];
         for (const org of orgs) {
-            const branchCountRes = await db.prepare("SELECT COUNT(*) as count FROM shops WHERE organization_id = ? AND status != 'deleted'").get(org.id);
+            await recalculateOrganizationSubscription(org.id);
+            const freshOrg = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(org.id);
+
+            const allBranches = await db.prepare("SELECT id, name, shop_name, shop_code, status, created_at FROM shops WHERE organization_id = ? ORDER BY created_at DESC").all(org.id);
+            const activeBranches = allBranches.filter(b => b.status === 'active');
+
             let ownerUser = null;
-            if (org.owner_id) {
-                ownerUser = await db.prepare("SELECT id, name, username, email, phone, status FROM users WHERE id = ?").get(org.owner_id);
+            if (freshOrg.owner_id) {
+                ownerUser = await db.prepare("SELECT id, name, username, email, phone, status FROM users WHERE id = ?").get(freshOrg.owner_id);
             }
 
             enrichedOrgs.push({
-                ...org,
-                branches_count: parseInt(branchCountRes?.count || 0),
-                owner: ownerUser || { id: org.owner_id, name: org.owner_name || 'Unassigned', username: 'N/A' }
+                ...freshOrg,
+                branches_count: allBranches.filter(b => b.status !== 'deleted').length,
+                active_branches_count: activeBranches.length,
+                price_per_branch: parseFloat(freshOrg.price_per_branch || 999),
+                subscription_amount: activeBranches.length * parseFloat(freshOrg.price_per_branch || 999),
+                owner: ownerUser || { id: freshOrg.owner_id, name: freshOrg.owner_name || 'Unassigned', username: 'N/A' },
+                branches_breakdown: allBranches.map(b => ({
+                    id: b.id,
+                    name: b.shop_name || b.name,
+                    code: b.shop_code,
+                    status: b.status,
+                    is_billable: b.status === 'active'
+                }))
             });
         }
 
@@ -38,7 +72,6 @@ const getOrganizations = async (req, res) => {
 const getOrganizationById = async (req, res) => {
     const { id } = req.params;
 
-    // Authorization check: Owner can only view their own organization
     if (req.user.role !== 'Admin' && req.user.organization_id !== id) {
         const userOrg = await db.prepare("SELECT id FROM organizations WHERE owner_id = ? AND id = ?").get(req.user.id, id);
         if (!userOrg) {
@@ -47,11 +80,16 @@ const getOrganizationById = async (req, res) => {
     }
 
     try {
+        await recalculateOrganizationSubscription(id);
         const org = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(id);
-        if (!org) return error(res, 'Organization not found', 404);
+        if (!org || org.status === 'deleted') return error(res, 'Organization not found', 404);
 
-        const branches = await db.prepare("SELECT id, name, shop_name, shop_code, status, address, phone, created_at FROM shops WHERE organization_id = ? AND status != 'deleted' ORDER BY created_at DESC").all(id);
+        const allBranches = await db.prepare("SELECT id, name, shop_name, shop_code, status, address, phone, created_at FROM shops WHERE organization_id = ? ORDER BY created_at DESC").all(id);
         const users = await db.prepare("SELECT id, name, username, email, role, status FROM users WHERE organization_id = ? AND status != 'disabled'").all(id);
+
+        const activeBranches = allBranches.filter(b => b.status === 'active');
+        const pricePerBranch = parseFloat(org.price_per_branch || 999);
+        const subAmount = activeBranches.length * pricePerBranch;
 
         let ownerUser = null;
         if (org.owner_id) {
@@ -60,9 +98,19 @@ const getOrganizationById = async (req, res) => {
 
         return success(res, 'Organization details retrieved', {
             ...org,
-            branches_count: branches.length,
+            branches_count: allBranches.filter(b => b.status !== 'deleted').length,
+            active_branches_count: activeBranches.length,
+            price_per_branch: pricePerBranch,
+            subscription_amount: subAmount,
             owner: ownerUser || { id: org.owner_id, name: org.owner_name, username: 'N/A' },
-            branches,
+            branches: allBranches.filter(b => b.status !== 'deleted'),
+            branches_breakdown: allBranches.map(b => ({
+                id: b.id,
+                name: b.shop_name || b.name,
+                code: b.shop_code,
+                status: b.status,
+                is_billable: b.status === 'active'
+            })),
             users
         });
     } catch (err) {
@@ -84,7 +132,8 @@ const createOrganization = async (req, res) => {
         email,
         phone,
         subscription_plan = 'Standard',
-        subscription_expiry
+        subscription_expiry,
+        price_per_branch = 999
     } = req.body;
 
     if (!name || !code) {
@@ -100,8 +149,8 @@ const createOrganization = async (req, res) => {
         const orgId = 'org_' + uuidv4().substring(0, 8);
         let ownerId = null;
 
-        // Set subscription expiry default to 1 year from now if not passed
         const defaultExpiry = subscription_expiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const numPricePerBranch = parseFloat(price_per_branch) || 999;
 
         if (owner_username && owner_password) {
             const existingUser = await db.prepare("SELECT id FROM users WHERE username = ?").get(owner_username);
@@ -119,7 +168,6 @@ const createOrganization = async (req, res) => {
                 'Selling Price', 'History', 'Parties', 'Suppliers', 'Ledgers', 'Payments', 'Purchases'
             ]);
 
-            // Default branch for organization
             const defaultShopId = 'shp_' + uuidv4().substring(0, 8);
             await db.prepare(`
                 INSERT INTO shops (id, name, shop_name, shop_code, owner_id, organization_id, status)
@@ -135,11 +183,13 @@ const createOrganization = async (req, res) => {
         await db.prepare(`
             INSERT INTO organizations (
                 id, name, code, owner_id, owner_name, email, phone, status,
-                subscription_plan, subscription_status, subscription_start, subscription_expiry
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'Active', CURRENT_TIMESTAMP, ?)
-        `).run(orgId, name, code, ownerId, owner_name || `${name} Owner`, email || null, phone || null, subscription_plan, defaultExpiry);
+                subscription_plan, subscription_status, subscription_start, subscription_expiry,
+                price_per_branch, active_branch_count, subscription_amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'Active', CURRENT_TIMESTAMP, ?, ?, 1, ?)
+        `).run(orgId, name, code, ownerId, owner_name || `${name} Owner`, email || null, phone || null, subscription_plan, defaultExpiry, numPricePerBranch, numPricePerBranch);
 
-        await logAudit('system', req.user.id, 'Create Organization', `Created organization '${name}' (${code})`);
+        await recalculateOrganizationSubscription(orgId);
+        await logAudit('system', req.user.id, 'Create Organization', `Created organization '${name}' (${code}) with 1 initial active branch`);
 
         return success(res, 'Organization created successfully', {
             id: orgId,
@@ -148,7 +198,10 @@ const createOrganization = async (req, res) => {
             owner_id: ownerId,
             subscription_plan,
             subscription_status: 'Active',
-            subscription_expiry: defaultExpiry
+            subscription_expiry: defaultExpiry,
+            active_branch_count: 1,
+            price_per_branch: numPricePerBranch,
+            subscription_amount: numPricePerBranch
         }, 201);
     } catch (err) {
         return error(res, err.message, 500);
@@ -161,7 +214,7 @@ const updateOrganization = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { name, email, phone, status, subscription_plan, subscription_status, subscription_expiry, owner_id } = req.body;
+    const { name, email, phone, status, subscription_plan, subscription_status, subscription_expiry, owner_id, price_per_branch } = req.body;
 
     try {
         let ownerName = null;
@@ -179,18 +232,19 @@ const updateOrganization = async (req, res) => {
                 subscription_plan = COALESCE(?, subscription_plan),
                 subscription_status = COALESCE(?, subscription_status),
                 subscription_expiry = COALESCE(?, subscription_expiry),
+                price_per_branch = COALESCE(?, price_per_branch),
                 owner_id = COALESCE(?, owner_id),
                 owner_name = COALESCE(?, owner_name),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `).run(name, email, phone, status, subscription_plan, subscription_status, subscription_expiry, owner_id, ownerName, id);
+        `).run(name, email, phone, status, subscription_plan, subscription_status, subscription_expiry, price_per_branch, owner_id, ownerName, id);
 
-        // If owner_id was updated, ensure user role and organization_id match
         if (owner_id) {
             await db.prepare("UPDATE users SET role = 'Owner', organization_id = ? WHERE id = ?").run(id, owner_id);
         }
 
-        await logAudit('system', req.user.id, 'Update Organization', `Updated organization ${id}`);
+        await recalculateOrganizationSubscription(id);
+        await logAudit('system', req.user.id, 'Update Organization', `Updated organization details for ${id}`);
 
         return success(res, 'Organization updated successfully');
     } catch (err) {
@@ -223,7 +277,6 @@ const assignOwner = async (req, res) => {
             const hashed = bcrypt.hashSync(owner_password, 10);
             targetOwnerName = owner_name || `${org.name} Owner`;
 
-            // Fetch a default shop for organization if present
             const orgShop = await db.prepare("SELECT id FROM shops WHERE organization_id = ?").get(id);
             const defaultShopId = orgShop ? orgShop.id : 'shop_default_hq';
 
@@ -276,14 +329,31 @@ const deleteOrganization = async (req, res) => {
 
     const { id } = req.params;
     try {
-        await db.prepare("UPDATE organizations SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
-        return success(res, 'Organization deleted successfully');
+        const org = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(id);
+        if (!org) return error(res, 'Organization not found', 404);
+
+        // Fetch affected branches before deletion
+        const affectedBranches = await db.prepare("SELECT id, shop_name, shop_code FROM shops WHERE organization_id = ? AND status != 'deleted'").all(id);
+
+        // 1. Soft delete Organization
+        await db.prepare("UPDATE organizations SET status = 'deleted', subscription_status = 'Cancelled', active_branch_count = 0, subscription_amount = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+
+        // 2. CASCADE soft delete all associated branches
+        await db.prepare("UPDATE shops SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE organization_id = ?").run(id);
+
+        // 3. Immediately revoke access for Owner and all branch staff users
+        await db.prepare("UPDATE users SET status = 'disabled', updated_at = CURRENT_TIMESTAMP WHERE organization_id = ? OR id = ?").run(id, org.owner_id || '');
+
+        await logAudit('system', req.user.id, 'Delete Organization', `Safely deleted organization '${org.name}' (${org.code}), soft-deleted ${affectedBranches.length} branches, and revoked user access`);
+
+        return success(res, `Organization '${org.name}' and all ${affectedBranches.length} associated branches have been safely deleted and user access revoked. Historical records remain archived.`);
     } catch (err) {
         return error(res, err.message, 500);
     }
 };
 
 module.exports = {
+    recalculateOrganizationSubscription,
     getOrganizations,
     getOrganizationById,
     createOrganization,

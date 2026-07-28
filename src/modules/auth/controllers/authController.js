@@ -63,6 +63,10 @@ const login = async (req, res) => {
             orgDetails = await db.prepare('SELECT * FROM organizations WHERE owner_id = ?').get(user.id);
         }
 
+        if (user.role !== 'Admin' && orgDetails && (orgDetails.status === 'deleted' || orgDetails.status === 'inactive')) {
+            return error(res, 'Your Organization has been deactivated or deleted. Contact Admin.', 403);
+        }
+
         const payload = {
             id: user.id,
             name: user.name,

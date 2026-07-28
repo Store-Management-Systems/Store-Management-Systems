@@ -284,6 +284,9 @@ async function initNeonDatabase() {
                 subscription_status VARCHAR(50) DEFAULT 'Active',
                 subscription_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 subscription_expiry TIMESTAMP,
+                price_per_branch NUMERIC DEFAULT 999,
+                active_branch_count INT DEFAULT 0,
+                subscription_amount NUMERIC DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -312,6 +315,9 @@ async function initNeonDatabase() {
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT 'Active';
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_expiry TIMESTAMP;
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS price_per_branch NUMERIC DEFAULT 999;
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_branch_count INT DEFAULT 0;
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_amount NUMERIC DEFAULT 0;
 
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_modes_split TEXT;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

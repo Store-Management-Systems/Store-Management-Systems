@@ -2,6 +2,7 @@ const { db, success, error } = require('../../../shared');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../../notifications/services/auditService');
+const { recalculateOrganizationSubscription } = require('../../organization/controllers/organizationController');
 
 const getShops = async (req, res) => {
     try {
@@ -24,7 +25,7 @@ const getShopById = async (req, res) => {
     try {
         const { id } = req.params;
         const shop = await db.prepare(`SELECT * FROM shops WHERE id = ?`).get(id);
-        if (!shop) {
+        if (!shop || shop.status === 'deleted') {
             return error(res, 'Shop branch not found', 404);
         }
 
@@ -133,6 +134,10 @@ const createShop = async (req, res) => {
             await db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(`unit_${shopId}_${idx}`, shopId, defaultUnits[idx]);
         }
 
+        if (targetOrgId && initialStatus === 'active') {
+            await recalculateOrganizationSubscription(targetOrgId);
+        }
+
         if (!isSuperAdmin && !isOwner) {
             const appId = 'app_' + uuidv4().substring(0, 8);
             const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
@@ -211,6 +216,10 @@ const updateShop = async (req, res) => {
             WHERE shop_id = ?
         `).run(shop_name, address, phone, gst, currency, tax_rate, logo, low_stock_alert, id);
 
+        if (shop.organization_id) {
+            await recalculateOrganizationSubscription(shop.organization_id);
+        }
+
         await logAudit(id, req.user.id, 'Update Shop', `Updated branch details for ${shop.shop_name}`);
         return success(res, 'Shop updated successfully');
     } catch (err) {
@@ -236,6 +245,10 @@ const toggleShopStatus = async (req, res) => {
         const newStatus = shop.status === 'active' ? 'disabled' : 'active';
         await db.prepare(`UPDATE shops SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(newStatus, id);
 
+        if (shop.organization_id) {
+            await recalculateOrganizationSubscription(shop.organization_id);
+        }
+
         await logAudit(id, req.user.id, 'Toggle Shop Status', `Shop ${shop.shop_name} set to ${newStatus}`);
         return success(res, `Shop is now ${newStatus}`);
     } catch (err) {
@@ -245,31 +258,35 @@ const toggleShopStatus = async (req, res) => {
 
 const deleteShop = async (req, res) => {
     const { id } = req.params;
-    if (id === 'shop_default_hq') {
-        return error(res, 'Cannot delete default main headquarters shop branch', 400);
-    }
 
     try {
         const shop = await db.prepare(`SELECT * FROM shops WHERE id = ?`).get(id);
-        if (!shop) {
-            return error(res, 'Shop not found', 404);
+        if (!shop || shop.status === 'deleted') {
+            return error(res, 'Shop branch not found', 404);
         }
 
+        // Authorization Enforcement: Owner can ONLY delete branches belonging to their own Organization
         if (req.user.role !== 'Admin') {
             const userOrgId = req.user.organization_id;
             if (shop.organization_id && userOrgId && shop.organization_id !== userOrgId && shop.owner_id !== req.user.id) {
-                return error(res, 'Unauthorized access to shop branch', 403);
+                return error(res, 'Unauthorized: You can only delete branches belonging to your own Organization', 403);
             }
         }
 
-        const billCount = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(id);
-        if (parseInt(billCount?.count || 0) > 0) {
-            return error(res, `Cannot delete branch '${shop.shop_name}' because it contains ${billCount.count} active sales transactions`, 400);
+        // 1. Soft delete the branch
+        await db.prepare(`UPDATE shops SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+
+        // 2. Revoke access for staff assigned to this specific branch (Owner and Admin retain system accounts)
+        await db.prepare(`UPDATE users SET status = 'disabled', updated_at = CURRENT_TIMESTAMP WHERE shop_id = ? AND role NOT IN ('Admin', 'Owner')`).run(id);
+
+        // 3. Recalculate billable branch count and subscription for parent organization
+        if (shop.organization_id) {
+            await recalculateOrganizationSubscription(shop.organization_id);
         }
 
-        await db.prepare(`UPDATE shops SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
-        await logAudit(id, req.user.id, 'Delete Shop', `Soft deleted shop branch ${shop.shop_name}`);
-        return success(res, 'Shop branch deleted successfully');
+        await logAudit(id, req.user.id, 'Delete Shop Branch', `Soft deleted branch '${shop.shop_name}' (${shop.shop_code}) and updated subscription quantity`);
+
+        return success(res, `Branch '${shop.shop_name}' deleted successfully. Active subscription count updated.`);
     } catch (err) {
         return error(res, err.message, 500);
     }

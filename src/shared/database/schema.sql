@@ -167,6 +167,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     subscription_status TEXT DEFAULT 'Active',
     subscription_start DATETIME DEFAULT CURRENT_TIMESTAMP,
     subscription_expiry DATETIME,
+    price_per_branch REAL DEFAULT 999,
+    active_branch_count INTEGER DEFAULT 0,
+    subscription_amount REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -515,7 +515,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
           <div>
             <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 Super Admin Dashboard</h2>
-            <div style="font-size:13px;color:var(--text-muted);">Manage Organizations & Subscription Statuses</div>
+            <div style="font-size:13px;color:var(--text-muted);">Manage Organizations, Branch-Based Subscriptions & Tenants</div>
           </div>
           <button class="btn-primary" onclick="openCreateOrganizationModal()">➕ Create Organization</button>
         </div>
@@ -541,7 +541,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
 
         <div class="card" style="margin-top:16px;">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-            <h3>🏢 Organization Directory & Subscriptions</h3>
+            <h3>🏢 Organization Directory & Branch-Based Subscriptions</h3>
             <button class="btn-sm btn-secondary" onclick="openOrganizationsModal()">⚙ Manage Directory</button>
           </div>
           <div style="overflow-x:auto;">
@@ -551,16 +551,20 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                   <th>Organization</th>
                   <th>Code</th>
                   <th>Owner</th>
-                  <th>Branches</th>
-                  <th>Plan</th>
-                  <th>Subscription Expiry</th>
-                  <th>Status</th>
+                  <th>Active Branches</th>
+                  <th>Price / Branch</th>
+                  <th>Current Subscription</th>
+                  <th>Plan & Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 ${orgs.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">No organizations created yet</td></tr>' :
-                  orgs.map(o => `
+                  orgs.map(o => {
+                    const activeCount = o.active_branches_count !== undefined ? o.active_branches_count : o.branches_count;
+                    const pricePerBranch = o.price_per_branch || 999;
+                    const subAmount = activeCount * pricePerBranch;
+                    return `
                     <tr>
                       <td style="font-weight:700;">${o.name}</td>
                       <td><code>${o.code}</code></td>
@@ -568,18 +572,23 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                         <div style="font-weight:600;">${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</div>
                         <div style="font-size:11px;color:var(--text-muted);">${o.owner ? '@' + o.owner.username : ''}</div>
                       </td>
-                      <td style="font-weight:700;color:var(--ios-blue);">${o.branches_count} Branch${o.branches_count !== 1 ? 'es' : ''}</td>
-                      <td><span class="badge badge-info">${o.subscription_plan || 'Standard'}</span></td>
+                      <td style="font-weight:700;color:var(--ios-blue);">${activeCount} Active Branch${activeCount !== 1 ? 'es' : ''}</td>
+                      <td style="font-weight:600;">${state.shop.currency}${fmtNum(pricePerBranch, 0)}</td>
+                      <td style="font-weight:800;color:var(--ios-green);font-size:15px;">${state.shop.currency}${fmtNum(subAmount, 0)} <span style="font-size:10px;font-weight:400;color:var(--text-muted);">(${activeCount} × ${state.shop.currency}${pricePerBranch})</span></td>
                       <td>
-                        <div style="font-size:12px;font-weight:600;">${o.subscription_expiry ? formatDate(o.subscription_expiry) : 'Lifetime'}</div>
+                        <span class="badge badge-info">${o.subscription_plan || 'Standard'}</span>
                         <span class="badge ${o.subscription_status === 'Expired' ? 'badge-danger' : (o.subscription_status === 'Expiring Soon' ? 'badge-warning' : 'badge-success')}">${o.subscription_status || 'Active'}</span>
                       </td>
-                      <td><span class="badge ${o.status === 'active' ? 'badge-success' : 'badge-danger'}">${o.status.toUpperCase()}</span></td>
                       <td>
-                        <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')">✏ Edit / Assign Owner</button>
+                        <div style="display:flex;gap:4px;">
+                          <button class="btn-sm btn-secondary" onclick="openOrganizationDetailsModal('${o.id}')" title="View Subscription Details & Breakdown">🔍 Details</button>
+                          <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')" title="Edit / Assign Owner">✏ Edit</button>
+                          <button class="btn-sm btn-danger" onclick="confirmDeleteOrganizationModal('${o.id}', '${o.name}')" title="Delete Organization & Cascade Branches">🗑 Delete</button>
+                        </div>
                       </td>
                     </tr>
-                  `).join('')
+                    `;
+                  }).join('')
                 }
               </tbody>
             </table>
@@ -596,6 +605,9 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
       const org = stats.organization || {};
       const sum = stats.summary || {};
       const perf = stats.branchPerformance || [];
+      const activeCount = org.active_branches_count !== undefined ? org.active_branches_count : (sum.activeBranches || perf.filter(b => b.status === 'active').length);
+      const pricePerBranch = org.price_per_branch || 999;
+      const subAmount = activeCount * pricePerBranch;
 
       c.innerHTML = `
       <div class="fade-in">
@@ -603,7 +615,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
           <div>
             <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 ${org.name || 'Organization Dashboard'}</h2>
             <div style="font-size:13px;color:var(--text-muted);">
-              Plan: <strong>${org.subscription_plan || 'Standard'}</strong> · Status: <span class="badge badge-success">${org.subscription_status || 'Active'}</span>
+              Plan: <strong>${org.subscription_plan || 'Standard'}</strong> · Status: <span class="badge badge-success">${org.subscription_status || 'Active'}</span> · Subscription: <strong>${activeCount} Active Branches × ${state.shop.currency}${pricePerBranch} = ${state.shop.currency}${fmtNum(subAmount, 0)}</strong>
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -622,7 +634,7 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
           </div>
         </div>
 
-        <div class="stats-grid" style="grid-template-columns:repeat(3, 1fr);">
+        <div class="stats-grid" style="grid-template-columns:repeat(4, 1fr);">
           <div class="stat-card" style="background:linear-gradient(135deg, rgba(0,122,255,0.08), rgba(52,199,89,0.08));border:1px solid rgba(0,122,255,0.2);">
             <div class="stat-value" style="color:var(--ios-blue);">${state.shop.currency}${fmtNum(sum.totalSales, 2)}</div>
             <div class="stat-label">Total Organization Sales</div>
@@ -632,8 +644,12 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
             <div class="stat-label">Total Invoices / Bills</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value" style="color:var(--ios-purple);">${sum.totalBranches || 0}</div>
-            <div class="stat-label">Active Branches</div>
+            <div class="stat-value" style="color:var(--ios-purple);">${activeCount} Active</div>
+            <div class="stat-label">Active Billable Branches</div>
+          </div>
+          <div class="stat-card" style="background:rgba(52,199,89,0.05);border:1px solid rgba(52,199,89,0.2);">
+            <div class="stat-value" style="color:var(--ios-green);">${state.shop.currency}${fmtNum(subAmount, 0)}</div>
+            <div class="stat-label">Subscription Amount</div>
           </div>
         </div>
 
@@ -664,7 +680,10 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                       <td style="font-weight:700;">${b.bill_count} Bills</td>
                       <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status.toUpperCase()}</span></td>
                       <td>
-                        <button class="btn-sm btn-primary" onclick="handleSwitchBranch('${b.branch_id}')">🔄 Switch to Branch</button>
+                        <div style="display:flex;gap:4px;">
+                          <button class="btn-sm btn-primary" onclick="handleSwitchBranch('${b.branch_id}')">🔄 Switch Branch</button>
+                          <button class="btn-sm btn-danger" onclick="confirmDeleteBranchModal('${b.branch_id}', '${b.branch_name}')">🗑 Delete Branch</button>
+                        </div>
                       </td>
                     </tr>
                   `).join('')
@@ -3388,6 +3407,147 @@ async function submitEditOrganization(id) {
       showSection('dashboard');
     }
   } catch (e) { alert(e.message); }
+}
+
+async function openOrganizationDetailsModal(id) {
+  try {
+    const res = await apiFetch(`/organizations/${id}`);
+    if (!res.success) throw new Error(res.message);
+    const org = res.data;
+
+    const breakdown = org.branches_breakdown || [];
+    const activeCount = org.active_branches_count !== undefined ? org.active_branches_count : breakdown.filter(b => b.status === 'active').length;
+    const pricePerBranch = org.price_per_branch || 999;
+    const subTotal = activeCount * pricePerBranch;
+
+    showModal(`🏢 Organization & Subscription Details: ${org.name}`, `
+      <div style="background:rgba(0,122,255,0.04);padding:14px;border-radius:12px;margin-bottom:16px;border:1px solid rgba(0,122,255,0.2);">
+        <div style="font-size:16px;font-weight:800;color:var(--text-primary);">${org.name} (Code: ${org.code})</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">Owner: <strong>${org.owner ? org.owner.name : (org.owner_name || 'Unassigned')}</strong> ${org.email ? '· Email: ' + org.email : ''}</div>
+      </div>
+
+      <div class="card" style="background:#fff;border:1px solid var(--border-light);padding:14px;margin-bottom:16px;">
+        <div style="font-weight:800;font-size:14px;color:var(--ios-blue);margin-bottom:8px;">💰 SUBSCRIPTION BREAKDOWN</div>
+        <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;font-size:13px;">
+          <div>Plan: <strong>${org.subscription_plan || 'Standard'}</strong></div>
+          <div>Status: <span class="badge ${org.subscription_status === 'Expired' ? 'badge-danger' : 'badge-success'}">${org.subscription_status || 'Active'}</span></div>
+          <div>Active Billable Branches: <strong style="color:var(--ios-blue);">${activeCount} Branch${activeCount !== 1 ? 'es' : ''}</strong></div>
+          <div>Price Per Branch: <strong>${state.shop.currency}${pricePerBranch}</strong></div>
+          <div>Expiry Date: <strong>${org.subscription_expiry ? formatDate(org.subscription_expiry) : 'Lifetime'}</strong></div>
+          <div style="font-size:15px;font-weight:800;color:var(--ios-green);">Total Subscription: ${state.shop.currency}${fmtNum(subTotal, 0)}</div>
+        </div>
+      </div>
+
+      <div style="font-weight:800;font-size:14px;margin-bottom:8px;">📍 Branch Billability List</div>
+      <div style="max-height:220px;overflow-y:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Branch Name</th>
+              <th>Code</th>
+              <th>Status</th>
+              <th>Billable Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${breakdown.length === 0 ? '<tr><td colspan="4" style="text-align:center;">No branches registered</td></tr>' :
+              breakdown.map(b => `
+                <tr>
+                  <td style="font-weight:700;">${b.name}</td>
+                  <td><code>${b.code}</code></td>
+                  <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status.toUpperCase()}</span></td>
+                  <td>
+                    ${b.is_billable ?
+                      `<span class="badge badge-success">✓ Active (Billable)</span>` :
+                      `<span class="badge badge-secondary">✗ Inactive/Deleted (Non-Billable)</span>`
+                    }
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>
+    `);
+  } catch (e) {
+    alert(e.message || 'Failed to load organization details');
+  }
+}
+
+async function confirmDeleteOrganizationModal(id, name) {
+  try {
+    const res = await apiFetch(`/organizations/${id}`);
+    const org = res.data || {};
+    const branches = org.branches || [];
+
+    showModal('⚠ HIGH-IMPACT ACTION: Delete Organization', `
+      <div style="background:rgba(255,59,48,0.06);padding:14px;border-radius:12px;border:1px solid rgba(255,59,48,0.25);margin-bottom:16px;">
+        <div style="font-weight:800;font-size:15px;color:var(--ios-red);margin-bottom:6px;">⚠ Delete Organization: ${name}?</div>
+        <div style="font-size:13px;color:var(--text-primary);line-height:1.4;">
+          Deleting this organization will also delete/deactivate all branches associated with it and may affect organization-related data. Access for all assigned owners and branch staff will be immediately revoked. This action cannot be undone.
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px;">📍 Affected Branches (${branches.length}):</div>
+        <div style="max-height:120px;overflow-y:auto;background:#f9f9f9;padding:10px;border-radius:8px;border:1px solid var(--border-light);">
+          ${branches.length === 0 ? '<div style="font-size:12px;color:var(--text-muted);">No active branches</div>' :
+            branches.map(b => `<div style="font-size:12px;font-weight:600;padding:2px 0;">• ${b.shop_name || b.name} (${b.shop_code})</div>`).join('')
+          }
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Type "DELETE" to confirm *</label>
+        <input type="text" id="confirmDeleteOrgText" placeholder="Type DELETE here">
+      </div>
+
+      <button class="btn-danger" style="width:100%;padding:12px;" onclick="submitDeleteOrganization('${id}')">🚨 Confirm & Delete Organization</button>
+    `);
+  } catch (e) {
+    alert(e.message || 'Failed to fetch organization info');
+  }
+}
+
+async function submitDeleteOrganization(id) {
+  const confirmText = document.getElementById('confirmDeleteOrgText').value.trim();
+  if (confirmText !== 'DELETE') {
+    alert('Please type "DELETE" exactly to confirm organization deletion.');
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/organizations/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      toast('✅ Organization and associated branches safely deleted');
+      closeModal();
+      showSection('dashboard');
+    }
+  } catch (e) { alert(e.message || 'Failed to delete organization'); }
+}
+
+function confirmDeleteBranchModal(id, name) {
+  showModal('🗑 Confirm Branch Deletion', `
+    <div style="background:rgba(255,59,48,0.06);padding:14px;border-radius:12px;border:1px solid rgba(255,59,48,0.2);margin-bottom:16px;">
+      <div style="font-weight:800;font-size:15px;color:var(--ios-red);margin-bottom:4px;">Deactivate / Delete Branch: ${name}?</div>
+      <div style="font-size:13px;color:var(--text-primary);line-height:1.4;">
+        Deleting this branch will remove it from active application access and reduce your active billable branch count. Historical sales and invoices for this branch will remain preserved.
+      </div>
+    </div>
+
+    <button class="btn-danger" style="width:100%;padding:12px;" onclick="submitDeleteBranch('${id}')">🗑 Confirm Delete Branch</button>
+  `);
+}
+
+async function submitDeleteBranch(id) {
+  try {
+    const res = await apiFetch(`/shops/${id}`, { method: 'DELETE' });
+    if (res.success) {
+      toast('✅ Branch deleted and subscription updated');
+      closeModal();
+      showSection('dashboard');
+    }
+  } catch (e) { alert(e.message || 'Failed to delete branch'); }
 }
 
 function openCreateBranchModal() {
