@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sms-pwa-v6-modern-ui';
+const CACHE_NAME = 'sms-pwa-v7-multi-tenant-saas';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

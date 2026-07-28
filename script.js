@@ -1,6 +1,6 @@
-// ─── SHOP MANAGEMENT SYSTEM - B2B & B2C ENTERPRISE FRONTEND ────────────────────────
-
-const API_URL = '/api';
+const API_URL = (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin === 'null' || !window.location.origin))
+  ? 'http://localhost:3000/api'
+  : '/api';
 
 let currentUser = null;
 let activeShopId = null;
