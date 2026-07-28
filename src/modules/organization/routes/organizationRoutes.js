@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { getOrganizations, getOrganizationById, createOrganization, updateOrganization, deleteOrganization } = require('../controllers/organizationController');
+const {
+    getOrganizations,
+    getOrganizationById,
+    createOrganization,
+    updateOrganization,
+    assignOwner,
+    deleteOrganization
+} = require('../controllers/organizationController');
 const { authenticate } = require('../../../shared');
 
 router.use(authenticate);
@@ -9,6 +16,7 @@ router.get('/', getOrganizations);
 router.get('/:id', getOrganizationById);
 router.post('/', createOrganization);
 router.put('/:id', updateOrganization);
+router.post('/:id/assign-owner', assignOwner);
 router.delete('/:id', deleteOrganization);
 
 module.exports = router;

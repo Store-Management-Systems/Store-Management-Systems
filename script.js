@@ -487,14 +487,199 @@ function renderSection(name) {
 }
 
 // ─── 1. Dashboard Section ─────────────────────────────────────────────────────
-async function renderDashboard(c) {
-  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading B2B & B2C Dashboard...</div>`;
+async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Dashboard...</div>`;
 
   try {
-    const res = await apiFetch('/dashboard');
+    let url = '/dashboard';
+    const params = [];
+    if (overrideRange) params.push(`range=${encodeURIComponent(overrideRange)}`);
+    if (overrideBranch) params.push(`branch_id=${encodeURIComponent(overrideBranch)}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
+    const res = await apiFetch(url);
     if (!res.success || !res.data) throw new Error(res.message);
 
     const stats = res.data;
+
+    // -------------------------------------------------------------
+    // 1. ADMIN DASHBOARD VIEW (Organization & Subscription Overview)
+    // -------------------------------------------------------------
+    if (stats.mode === 'Admin') {
+      const m = stats.metrics || {};
+      const subs = m.subscriptions || { active: 0, expiringSoon: 0, expired: 0 };
+      const orgs = stats.organizations || [];
+
+      c.innerHTML = `
+      <div class="fade-in">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 Super Admin Dashboard</h2>
+            <div style="font-size:13px;color:var(--text-muted);">Manage Organizations & Subscription Statuses</div>
+          </div>
+          <button class="btn-primary" onclick="openCreateOrganizationModal()">➕ Create Organization</button>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(4, 1fr);">
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-blue);">${m.totalOrganizations || 0}</div>
+            <div class="stat-label">Total Organizations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-green);">${m.activeOrganizations || 0}</div>
+            <div class="stat-label">Active Organizations</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-orange);">${subs.expiringSoon || 0}</div>
+            <div class="stat-label">Expiring Subscriptions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-red);">${subs.expired || 0}</div>
+            <div class="stat-label">Expired Subscriptions</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3>🏢 Organization Directory & Subscriptions</h3>
+            <button class="btn-sm btn-secondary" onclick="openOrganizationsModal()">⚙ Manage Directory</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Organization</th>
+                  <th>Code</th>
+                  <th>Owner</th>
+                  <th>Branches</th>
+                  <th>Plan</th>
+                  <th>Subscription Expiry</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${orgs.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">No organizations created yet</td></tr>' :
+                  orgs.map(o => `
+                    <tr>
+                      <td style="font-weight:700;">${o.name}</td>
+                      <td><code>${o.code}</code></td>
+                      <td>
+                        <div style="font-weight:600;">${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">${o.owner ? '@' + o.owner.username : ''}</div>
+                      </td>
+                      <td style="font-weight:700;color:var(--ios-blue);">${o.branches_count} Branch${o.branches_count !== 1 ? 'es' : ''}</td>
+                      <td><span class="badge badge-info">${o.subscription_plan || 'Standard'}</span></td>
+                      <td>
+                        <div style="font-size:12px;font-weight:600;">${o.subscription_expiry ? formatDate(o.subscription_expiry) : 'Lifetime'}</div>
+                        <span class="badge ${o.subscription_status === 'Expired' ? 'badge-danger' : (o.subscription_status === 'Expiring Soon' ? 'badge-warning' : 'badge-success')}">${o.subscription_status || 'Active'}</span>
+                      </td>
+                      <td><span class="badge ${o.status === 'active' ? 'badge-success' : 'badge-danger'}">${o.status.toUpperCase()}</span></td>
+                      <td>
+                        <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')">✏ Edit / Assign Owner</button>
+                      </td>
+                    </tr>
+                  `).join('')
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+      return;
+    }
+
+    // -------------------------------------------------------------
+    // 2. OWNER DASHBOARD VIEW (Organization & Branch-wise Sales)
+    // -------------------------------------------------------------
+    if (stats.mode === 'Owner') {
+      const org = stats.organization || {};
+      const sum = stats.summary || {};
+      const perf = stats.branchPerformance || [];
+
+      c.innerHTML = `
+      <div class="fade-in">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 ${org.name || 'Organization Dashboard'}</h2>
+            <div style="font-size:13px;color:var(--text-muted);">
+              Plan: <strong>${org.subscription_plan || 'Standard'}</strong> · Status: <span class="badge badge-success">${org.subscription_status || 'Active'}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="ownerBranchFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), document.getElementById('ownerDateRangeFilter').value, this.value)">
+              <option value="all" ${(!overrideBranch || overrideBranch === 'all') ? 'selected' : ''}>🌐 All Branches (${perf.length})</option>
+              ${perf.map(b => `<option value="${b.branch_id}" ${overrideBranch === b.branch_id ? 'selected' : ''}>📍 ${b.branch_name} (${b.branch_code})</option>`).join('')}
+            </select>
+            <select id="ownerDateRangeFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), this.value, document.getElementById('ownerBranchFilter').value)">
+              <option value="all" ${(!overrideRange || overrideRange === 'all') ? 'selected' : ''}>📅 All Time</option>
+              <option value="today" ${overrideRange === 'today' ? 'selected' : ''}>Today</option>
+              <option value="yesterday" ${overrideRange === 'yesterday' ? 'selected' : ''}>Yesterday</option>
+              <option value="7days" ${overrideRange === '7days' ? 'selected' : ''}>Last 7 Days</option>
+              <option value="30days" ${overrideRange === '30days' ? 'selected' : ''}>Last 30 Days</option>
+            </select>
+            <button class="btn-primary" onclick="openCreateBranchModal()">➕ Create Branch</button>
+          </div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(3, 1fr);">
+          <div class="stat-card" style="background:linear-gradient(135deg, rgba(0,122,255,0.08), rgba(52,199,89,0.08));border:1px solid rgba(0,122,255,0.2);">
+            <div class="stat-value" style="color:var(--ios-blue);">${state.shop.currency}${fmtNum(sum.totalSales, 2)}</div>
+            <div class="stat-label">Total Organization Sales</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-green);">${sum.totalBills || 0}</div>
+            <div class="stat-label">Total Invoices / Bills</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--ios-purple);">${sum.totalBranches || 0}</div>
+            <div class="stat-label">Active Branches</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3>📍 Branch Performance Breakdown</h3>
+            <button class="btn-sm btn-secondary" onclick="openCreateBranchModal()">➕ Add Branch</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Branch Name</th>
+                  <th>Branch Code</th>
+                  <th>Total Sales</th>
+                  <th>Total Invoices</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${perf.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No branches created yet</td></tr>' :
+                  perf.map(b => `
+                    <tr>
+                      <td style="font-weight:700;font-size:15px;color:var(--text-primary);">${b.branch_name}</td>
+                      <td><code>${b.branch_code}</code></td>
+                      <td style="font-weight:800;color:var(--ios-green);font-size:16px;">${state.shop.currency}${fmtNum(b.sales, 2)}</td>
+                      <td style="font-weight:700;">${b.bill_count} Bills</td>
+                      <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status.toUpperCase()}</span></td>
+                      <td>
+                        <button class="btn-sm btn-primary" onclick="handleSwitchBranch('${b.branch_id}')">🔄 Switch to Branch</button>
+                      </td>
+                    </tr>
+                  `).join('')
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+      return;
+    }
+
+    // -------------------------------------------------------------
+    // 3. BRANCH / STAFF DASHBOARD VIEW
+    // -------------------------------------------------------------
     const lowStockCount = stats.items.lowStockCount || 0;
     const todayRev = stats.revenue.today || 0;
     const todayBillsCount = stats.bills.today || 0;
@@ -3046,9 +3231,23 @@ function openCreateOrganizationModal() {
       <label class="form-label">Organization Code *</label>
       <input type="text" id="orgCode" placeholder="e.g. BTG-01">
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Subscription Plan</label>
+        <select id="orgSubPlan" class="form-control">
+          <option value="Standard" selected>Standard Plan</option>
+          <option value="Pro">Pro Plan</option>
+          <option value="Enterprise">Enterprise Plan</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subscription Expiry Date</label>
+        <input type="date" id="orgSubExpiry" value="${new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0]}">
+      </div>
+    </div>
 
     <div style="background:rgba(0,122,255,0.04);padding:12px;border-radius:10px;margin:12px 0;border:1px solid rgba(0,122,255,0.15);">
-      <div style="font-weight:700;font-size:13px;color:var(--ios-blue);margin-bottom:8px;">👤 Organization Owner Account</div>
+      <div style="font-weight:700;font-size:13px;color:var(--ios-blue);margin-bottom:8px;">👤 Appoint Organization Owner</div>
       <div class="form-group">
         <label class="form-label">Owner Full Name</label>
         <input type="text" id="orgOwnerName" placeholder="e.g. John Doe">
@@ -3075,13 +3274,15 @@ function openCreateOrganizationModal() {
       </div>
     </div>
 
-    <button class="btn-primary" style="width:100%;padding:12px;" onclick="submitCreateOrganization()">🏢 Create Organization & Owner</button>
+    <button class="btn-primary" style="width:100%;padding:12px;" onclick="submitCreateOrganization()">🏢 Create Organization & Assign Owner</button>
   `);
 }
 
 async function submitCreateOrganization() {
   const name = document.getElementById('orgName').value.trim();
   const code = document.getElementById('orgCode').value.trim();
+  const subscription_plan = document.getElementById('orgSubPlan').value;
+  const subscription_expiry = document.getElementById('orgSubExpiry').value;
   const owner_name = document.getElementById('orgOwnerName').value.trim();
   const owner_username = document.getElementById('orgOwnerUsername').value.trim();
   const owner_password = document.getElementById('orgOwnerPassword').value;
@@ -3096,17 +3297,160 @@ async function submitCreateOrganization() {
   try {
     const res = await apiFetch('/organizations', {
       method: 'POST',
-      body: JSON.stringify({ name, code, owner_name, owner_username, owner_password, email, phone })
+      body: JSON.stringify({ name, code, subscription_plan, subscription_expiry, owner_name, owner_username, owner_password, email, phone })
     });
 
     if (res.success) {
       toast('✅ Organization & Owner account created successfully');
       closeModal();
-      openOrganizationsModal();
+      showSection('dashboard');
     }
   } catch (err) {
     alert(err.message || 'Failed to create organization');
   }
+}
+
+async function openEditOrganizationModal(id) {
+  try {
+    const res = await apiFetch(`/organizations/${id}`);
+    if (!res.success) throw new Error(res.message);
+    const org = res.data;
+
+    showModal('✏ Edit Organization & Owner', `
+      <div class="form-group">
+        <label class="form-label">Organization Name *</label>
+        <input type="text" id="editOrgName" value="${org.name || ''}">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="editOrgEmail" value="${org.email || ''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="tel" id="editOrgPhone" value="${org.phone || ''}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Subscription Plan</label>
+          <select id="editOrgPlan" class="form-control">
+            <option value="Standard" ${org.subscription_plan === 'Standard' ? 'selected' : ''}>Standard Plan</option>
+            <option value="Pro" ${org.subscription_plan === 'Pro' ? 'selected' : ''}>Pro Plan</option>
+            <option value="Enterprise" ${org.subscription_plan === 'Enterprise' ? 'selected' : ''}>Enterprise Plan</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Subscription Status</label>
+          <select id="editOrgSubStatus" class="form-control">
+            <option value="Active" ${org.subscription_status === 'Active' ? 'selected' : ''}>Active</option>
+            <option value="Expiring Soon" ${org.subscription_status === 'Expiring Soon' ? 'selected' : ''}>Expiring Soon</option>
+            <option value="Expired" ${org.subscription_status === 'Expired' ? 'selected' : ''}>Expired</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subscription Expiry Date</label>
+        <input type="date" id="editOrgExpiry" value="${org.subscription_expiry ? org.subscription_expiry.split('T')[0] : ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Organization Status</label>
+        <select id="editOrgStatus" class="form-control">
+          <option value="active" ${org.status === 'active' ? 'selected' : ''}>Active</option>
+          <option value="inactive" ${org.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="submitEditOrganization('${id}')">💾 Save Organization Changes</button>
+    `);
+  } catch (e) {
+    alert(e.message || 'Failed to load organization details');
+  }
+}
+
+async function submitEditOrganization(id) {
+  const name = document.getElementById('editOrgName').value.trim();
+  const email = document.getElementById('editOrgEmail').value.trim();
+  const phone = document.getElementById('editOrgPhone').value.trim();
+  const subscription_plan = document.getElementById('editOrgPlan').value;
+  const subscription_status = document.getElementById('editOrgSubStatus').value;
+  const subscription_expiry = document.getElementById('editOrgExpiry').value;
+  const status = document.getElementById('editOrgStatus').value;
+
+  try {
+    const res = await apiFetch(`/organizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, email, phone, subscription_plan, subscription_status, subscription_expiry, status })
+    });
+    if (res.success) {
+      toast('✅ Organization details updated');
+      closeModal();
+      showSection('dashboard');
+    }
+  } catch (e) { alert(e.message); }
+}
+
+function openCreateBranchModal() {
+  showModal('📍 Create New Branch', `
+    <div class="form-group">
+      <label class="form-label">Branch Name *</label>
+      <input type="text" id="branchName" placeholder="e.g. Jharsuguda Branch">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Branch Code *</label>
+      <input type="text" id="branchCode" placeholder="e.g. BTG-JHS">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Phone Number</label>
+        <input type="tel" id="branchPhone" placeholder="10 Digit Phone">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="branchEmail" placeholder="branch@company.com">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Address</label>
+      <textarea id="branchAddress" rows="2" placeholder="Full branch address..."></textarea>
+    </div>
+
+    <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="submitCreateBranch()">📍 Create Branch</button>
+  `);
+}
+
+async function submitCreateBranch() {
+  const shop_name = document.getElementById('branchName').value.trim();
+  const shop_code = document.getElementById('branchCode').value.trim();
+  const phone = document.getElementById('branchPhone').value.trim();
+  const email = document.getElementById('branchEmail').value.trim();
+  const address = document.getElementById('branchAddress').value.trim();
+
+  if (!shop_name || !shop_code) {
+    alert('Please enter Branch Name and Branch Code');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/shops', {
+      method: 'POST',
+      body: JSON.stringify({ shop_name, shop_code, phone, email, address })
+    });
+    if (res.success || res.status === 201 || res.status === 202) {
+      toast('✅ New branch created successfully');
+      closeModal();
+      showSection('dashboard');
+    }
+  } catch (e) {
+    alert(e.message || 'Failed to create branch');
+  }
+}
+
+async function handleSwitchBranch(shopId) {
+  activeShopId = shopId;
+  localStorage.setItem('active_shop_id', shopId);
+  toast('🔄 Switched active branch view');
+  loadInitialData();
 }
 
 async function deleteUserSubmit(id, username) {

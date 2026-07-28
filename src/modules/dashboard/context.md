@@ -1,20 +1,31 @@
 # Module: Dashboard (`dashboard`)
 
 ## Purpose
-The Dashboard module aggregates real-time high-level business indicators, stock alerts, sales figures, B2B/B2C party balances, today's collections, and recent sales transactions for quick decision-making.
+The Dashboard module delivers tailored real-time executive and operational views depending on the user's role in the organizational hierarchy: Superadmin Overview, Owner Organization & Branch-wise Performance, and Branch Staff Operational Metrics.
 
-## Current Functionality
-* Total active item counts and low-stock alerts (stock <= 5).
-* Today's total revenue and overall shop revenue calculation.
-* Today's transaction count and 5 most recent bills list.
-* Party / B2B supplier payable and receivable balances.
-* Today's cash inflow collections and cash outflow payments.
+## Role-Specific Dashboard Modes
 
-## User Roles
-* **Admin, Owner, Manager, Staff** (Subject to `Dashboard` permission).
+### 1. ADMIN DASHBOARD (`mode: 'Admin'`)
+Focuses on Organization & Subscription Management:
+* Metrics Cards: Total Organizations, Active Organizations, Inactive Organizations, Expiring Subscriptions, Expired Subscriptions.
+* Organization Directory Table: Displays Organization Name, Code, Owner Name & Username, Branch Count, Subscription Plan, Subscription Status, Subscription Expiry Date, Status, and Action buttons (Edit / Assign Owner).
 
-## Permissions
-* Requires `Dashboard` permission in `checkPermission('Dashboard')`.
+### 2. OWNER DASHBOARD (`mode: 'Owner'`)
+Focuses on Organization Sales Overview & Branch Performance:
+* Organization Header: Displays Organization Name, Subscription Plan, and Active Status.
+* Total Organization Sales Card: Aggregated sales across all branches belonging exclusively to the Owner's Organization.
+* Date Range Filter: Supports `all`, `today`, `yesterday`, `7days`, `30days`, and custom date ranges.
+* Branch Filter Dropdown: Filter performance by "All Branches" or a specific branch belonging to the Organization.
+* Branch Performance Table: Branch-wise sales breakdown (Branch Name, Code, Total Sales, Bill Count, Status, and "Switch to Branch" action button).
+
+### 3. BRANCH / STAFF DASHBOARD (`mode: 'Branch'`)
+Focuses on single branch operational metrics:
+* Low stock warning alerts.
+* Total Items & Low Stock counters.
+* Today's Collections & Today's Sales.
+* Financial Position Overview (Total Receivable, Total Payable, Net Outstanding).
+* Retail B2C, B2B Parties, and Suppliers Widget summaries.
+* Quick Enterprise Action buttons & Recent Invoices list.
 
 ## File Structure
 ```
@@ -28,59 +39,11 @@ src/modules/dashboard/
 ```
 
 ## Routes
-* `GET /api/dashboard`: Aggregates and returns executive summary metrics for the target shop.
-
-## Components
-* Communicates with Dashboard cards and summary widgets in `index.html` and `script.js`.
-
-## Services / Business Logic
-* Allows Admin users to view any shop via query parameter `?shop_id=...`; non-Admins strictly view their `active_shop_id`.
-* Dynamically calculates net outstanding across B2C customers, B2B parties, and suppliers.
-
-## API / Server Actions
-* Uses Standard JSON response via `src/shared/utils/response.js`.
-
-## Database Dependencies
-* `items`: Item counts and low stock filters (`stock <= 5`).
-* `bills`: Total revenue, today's revenue, recent bill records.
-* `people`: Categorized party list for balance calculation.
-* `purchases`: B2B supplier purchase totals.
-* `payments`: Collections and cash out flows.
+* `GET /api/dashboard`: Fetch role-specific dashboard metrics with optional `?range=` and `?branch_id=` filters.
 
 ## Shared Dependencies
 * `src/shared/middleware/auth.js` (`authenticate`)
-* `src/shared/middleware/rbac.js` (`checkPermission`)
 * `src/shared/database/init.js` (`db`)
 
-## Module Dependencies
-* `inventory` (Items & stock thresholds)
-* `billing` (Bills & sales totals)
-* `customers` (People, parties & suppliers)
-
-## Data Flow
-```
-GET /api/dashboard
-  ↓
-Extract target shop_id -> Execute aggregated SQL queries over items, bills, people, purchases, payments
-  ↓
-Return formatted JSON containing items, revenue, bills, and finance metrics
-```
-
-## Important Business Rules
-* Low stock threshold is fixed at `<= 5` unless overridden by shop settings.
-* Deleted entities (`status = 'deleted'`) MUST be excluded from totals.
-
-## Validation Rules
-* Requires valid JWT session and permission check.
-
-## Current UI Behaviour
-* Displayed automatically on user login in main dashboard grid.
-
-## Known Limitations
-* Iterative `people` balance calculations can be optimized with unified SQL VIEW queries for ultra-large datasets.
-
-## Change History
-* Modularized into `src/modules/dashboard`.
-
-## Future Development Instructions
-* When adding new entity counters, include them in the `/api/dashboard` response object payload under appropriate widget keys.
+## Data Isolation Rules
+* Owner Dashboard strictly aggregates and filters branches where `organization_id = req.user.organization_id` or `owner_id = req.user.id`. Sales or branch metrics belonging to other organizations are never included.

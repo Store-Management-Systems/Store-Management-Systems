@@ -2,7 +2,175 @@ const { db, success, error } = require('../../../shared');
 
 const getDashboardStats = async (req, res) => {
     try {
-        const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
+        const { range, startDate, endDate, branch_id } = req.query;
+        const role = req.user.role;
+
+        // -------------------------------------------------------------
+        // 1. ADMIN DASHBOARD (Organization & Subscription Overview)
+        // -------------------------------------------------------------
+        if (role === 'Admin') {
+            const orgs = await db.prepare("SELECT * FROM organizations WHERE status != 'deleted' ORDER BY created_at DESC").all();
+            const totalOrgs = orgs.length;
+            const activeOrgs = orgs.filter(o => o.status === 'active').length;
+            const inactiveOrgs = totalOrgs - activeOrgs;
+
+            let activeSubs = 0;
+            let expiringSubs = 0;
+            let expiredSubs = 0;
+
+            const now = new Date();
+
+            const enrichedOrgs = [];
+            for (const org of orgs) {
+                const branchCountRes = await db.prepare("SELECT COUNT(*) as count FROM shops WHERE organization_id = ? AND status != 'deleted'").get(org.id);
+                
+                let subStatus = org.subscription_status || 'Active';
+                if (org.subscription_expiry) {
+                    const expDate = new Date(org.subscription_expiry);
+                    const daysRemaining = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+                    if (daysRemaining < 0) {
+                        subStatus = 'Expired';
+                        expiredSubs++;
+                    } else if (daysRemaining <= 15) {
+                        subStatus = 'Expiring Soon';
+                        expiringSubs++;
+                    } else {
+                        subStatus = 'Active';
+                        activeSubs++;
+                    }
+                } else {
+                    activeSubs++;
+                }
+
+                let ownerUser = null;
+                if (org.owner_id) {
+                    ownerUser = await db.prepare("SELECT id, name, username, email FROM users WHERE id = ?").get(org.owner_id);
+                }
+
+                enrichedOrgs.push({
+                    ...org,
+                    subscription_status: subStatus,
+                    branches_count: parseInt(branchCountRes?.count || 0),
+                    owner: ownerUser || { id: org.owner_id, name: org.owner_name || 'Unassigned', username: 'N/A' }
+                });
+            }
+
+            return success(res, 'Admin organization & subscription dashboard loaded', {
+                mode: 'Admin',
+                metrics: {
+                    totalOrganizations: totalOrgs,
+                    activeOrganizations: activeOrgs,
+                    inactiveOrganizations: inactiveOrgs,
+                    subscriptions: {
+                        active: activeSubs,
+                        expiringSoon: expiringSubs,
+                        expired: expiredSubs
+                    }
+                },
+                organizations: enrichedOrgs
+            });
+        }
+
+        // Determine Owner's Organization
+        let userOrgId = req.user.organization_id;
+        if (!userOrgId && role === 'Owner') {
+            const orgRec = await db.prepare("SELECT id FROM organizations WHERE owner_id = ?").get(req.user.id);
+            if (orgRec) userOrgId = orgRec.id;
+        }
+
+        // -------------------------------------------------------------
+        // 2. OWNER DASHBOARD (Organization-level & Branch-wise Sales)
+        // -------------------------------------------------------------
+        if (role === 'Owner') {
+            let org = null;
+            if (userOrgId) {
+                org = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(userOrgId);
+            }
+
+            // Get all branches belonging strictly to this Owner's Organization
+            let branches = [];
+            if (userOrgId) {
+                branches = await db.prepare("SELECT id, name, shop_name, shop_code, status, address, phone FROM shops WHERE organization_id = ? AND status != 'deleted' ORDER BY created_at DESC").all(userOrgId);
+            } else {
+                branches = await db.prepare("SELECT id, name, shop_name, shop_code, status, address, phone FROM shops WHERE owner_id = ? AND status != 'deleted' ORDER BY created_at DESC").all(req.user.id);
+            }
+
+            const branchIds = branches.map(b => b.id);
+            let targetBranchIds = branchIds;
+
+            if (branch_id && branch_id !== 'all') {
+                if (branchIds.includes(branch_id)) {
+                    targetBranchIds = [branch_id];
+                } else {
+                    targetBranchIds = [];
+                }
+            }
+
+            // Build Date Filter Clause for Bills
+            let dateClause = "";
+            const params = [];
+
+            if (range === 'today') {
+                dateClause = " AND created_at >= CURRENT_DATE";
+            } else if (range === 'yesterday') {
+                dateClause = " AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AND created_at < CURRENT_DATE";
+            } else if (range === '7days') {
+                dateClause = " AND created_at >= (CURRENT_DATE - INTERVAL '7 days')";
+            } else if (range === '30days') {
+                dateClause = " AND created_at >= (CURRENT_DATE - INTERVAL '30 days')";
+            } else if (startDate && endDate) {
+                dateClause = " AND created_at >= ? AND created_at <= ?";
+                params.push(startDate, endDate);
+            }
+
+            let totalOrgSales = 0;
+            let totalOrgBills = 0;
+            const branchPerformance = [];
+
+            for (const b of branches) {
+                let sqlSales = `SELECT SUM(total) as sum, COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled'` + dateClause;
+                const p = [b.id, ...params];
+                const resSales = await db.prepare(sqlSales).get(...p);
+
+                const bSales = parseFloat(resSales?.sum || 0);
+                const bBills = parseInt(resSales?.count || 0);
+
+                if (targetBranchIds.includes(b.id)) {
+                    totalOrgSales += bSales;
+                    totalOrgBills += bBills;
+                }
+
+                branchPerformance.push({
+                    branch_id: b.id,
+                    branch_name: b.shop_name || b.name,
+                    branch_code: b.shop_code,
+                    sales: bSales,
+                    bill_count: bBills,
+                    status: b.status,
+                    phone: b.phone
+                });
+            }
+
+            return success(res, 'Owner organization dashboard loaded', {
+                mode: 'Owner',
+                organization: org || { name: 'My Organization', code: 'ORG' },
+                summary: {
+                    totalSales: totalOrgSales,
+                    totalBills: totalOrgBills,
+                    totalBranches: branches.length
+                },
+                branchPerformance,
+                filter: {
+                    range: range || 'all',
+                    branch_id: branch_id || 'all'
+                }
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 3. STAFF / SINGLE BRANCH DASHBOARD
+        // -------------------------------------------------------------
+        const targetShop = req.user.active_shop_id;
 
         // 1. Items Summary
         const totalItemsRes = await db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active'`).get(targetShop);
@@ -10,9 +178,9 @@ const getDashboardStats = async (req, res) => {
         const lowStockItems = await db.prepare(`SELECT id, name, stock, unit, category FROM items WHERE shop_id = ? AND status = 'active' AND stock <= 5 LIMIT 10`).all(targetShop);
 
         // 2. Revenue & Sales Metrics
-        const todayRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND created_at >= CURRENT_DATE`).get(targetShop);
-        const totalRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ?`).get(targetShop);
-        const todayBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND created_at >= CURRENT_DATE`).get(targetShop);
+        const todayRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
+        const totalRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop);
+        const todayBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
 
         // 3. Recent Bills
         const recentBills = await db.prepare(`SELECT * FROM bills WHERE shop_id = ? ORDER BY created_at DESC LIMIT 5`).all(targetShop);
@@ -71,7 +239,8 @@ const getDashboardStats = async (req, res) => {
         const totalPayable = supplierPayable;
         const netOutstanding = totalReceivable - totalPayable;
 
-        return success(res, 'Dashboard statistics loaded', {
+        return success(res, 'Branch dashboard statistics loaded', {
+            mode: 'Branch',
             items: {
                 total: parseInt(totalItemsRes?.count || 0),
                 lowStockCount: parseInt(lowStockRes?.count || 0),

@@ -153,3 +153,21 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS organizations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT UNIQUE NOT NULL,
+    owner_id TEXT,
+    owner_name TEXT,
+    email TEXT,
+    phone TEXT,
+    status TEXT DEFAULT 'active',
+    subscription_plan TEXT DEFAULT 'Standard',
+    subscription_status TEXT DEFAULT 'Active',
+    subscription_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+    subscription_expiry DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+

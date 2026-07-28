@@ -134,6 +134,11 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('users', 'date_of_joining', 'DATE');
     addColIfMissing('users', 'salary', 'REAL DEFAULT 0');
 
+    addColIfMissing('organizations', 'subscription_plan', "TEXT DEFAULT 'Standard'");
+    addColIfMissing('organizations', 'subscription_status', "TEXT DEFAULT 'Active'");
+    addColIfMissing('organizations', 'subscription_start', 'DATETIME');
+    addColIfMissing('organizations', 'subscription_expiry', 'DATETIME');
+
     try {
         sqliteDb.exec(`
             CREATE TABLE IF NOT EXISTS approvals (
@@ -160,6 +165,10 @@ if (connectionString && connectionString.startsWith('postgres')) {
                 email TEXT,
                 phone TEXT,
                 status TEXT DEFAULT 'active',
+                subscription_plan TEXT DEFAULT 'Standard',
+                subscription_status TEXT DEFAULT 'Active',
+                subscription_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+                subscription_expiry DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );

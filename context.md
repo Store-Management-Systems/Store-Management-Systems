@@ -1,7 +1,54 @@
 # Root Context: Store Management Systems (SMS) SaaS ERP
 
 ## Purpose
-Store Management Systems (SMS) is an Enterprise SaaS ERP platform designed for multi-shop management, inventory control, point-of-sale (POS) billing, party/ledger management, approvals workflow, and financial analytics with granular Role-Based Access Control (RBAC).
+Store Management Systems (SMS) is an Enterprise SaaS ERP platform designed for multi-tenant organization management, multi-branch operations, inventory control, point-of-sale (POS) billing, party/ledger management, approvals workflow, and financial analytics with granular Role-Based Access Control (RBAC).
+
+## Core Application Working Principle & Organizational Hierarchy
+The application operates strictly under the following 4-tier organizational hierarchy:
+
+```
+                  ADMIN (Superadmin)
+                    │
+        ┌───────────┼───────────┐
+        ↓           ↓           ↓
+   Organization A  Org B       Org C
+        │
+      Owner
+        │
+  ┌─────┼─────┐
+  ↓     ↓     ↓
+Branch 1 Branch 2 Branch 3 (Shops)
+  │       │       │
+Existing branch-level operational modules (Billing, Inventory, Customers, Ledgers, Reports, RBAC)
+```
+
+### Hierarchy Breakdown & Role Responsibilities
+1. **ADMIN (Superadmin)**:
+   - Manages Organizations and Subscription details across the platform.
+   - Creates Organizations and appoints/assigns Organization Owners (`owner_id`).
+   - Views total, active, and inactive organizations, subscription plans, and expiry dates.
+   - Does NOT engage in branch-level operational tasks.
+
+2. **ORGANIZATION**:
+   - Represents a corporate tenant entity (`id`, `name`, `code`, `owner_id`, `subscription_plan`, `subscription_status`, `subscription_expiry`, `status`).
+   - Contains an appointed Owner and multiple Branches (Shops).
+
+3. **OWNER (Organization Owner)**:
+   - Belongs to a specific Organization (`organization_id`).
+   - Creates, views, and manages multiple Branches (Shops) belonging exclusively to their Organization.
+   - Accesses the Owner Dashboard featuring **Organization Sales Overview** (aggregated sales across all organization branches) and **Branch Performance Breakdown** (branch-wise sales data with date and branch filtering).
+   - Manages staff users within their Organization.
+
+4. **BRANCH / EXISTING USERS (Shops & Staff)**:
+   - Each Branch operates independently under its parent Organization (`shop_id = branch_id`, `organization_id`).
+   - Managers and Staff execute branch-specific operations (Billing/POS, Inventory, Customers, Ledgers, Reports, Settings) governed by fine-grained permissions.
+
+### Data Isolation Rules (CRITICAL)
+- Database queries, API endpoints, and authentication middleware strictly scope data access by `organization_id` and `shop_id`.
+- Data NEVER leaks across Organizations. Owner A can NEVER view or modify Branches, Sales, Customers, or Inventory belonging to Organization B.
+- Backend authorization checks validate tenant ownership even if headers (`x-shop-id`) or API parameters are manipulated.
+
+---
 
 ## Technology Stack
 * **Backend Runtime**: Node.js (v20.x)
@@ -11,14 +58,11 @@ Store Management Systems (SMS) is an Enterprise SaaS ERP platform designed for m
   * Cloud / Production: Neon PostgreSQL (`pg` v8.22.0) with dynamic query translation
 * **Security & Optimization**: Helmet, CORS, Express Compression, Cookie Parser, Express Rate Limit, Bcryptjs, JsonWebToken (JWT)
 * **Desktop Wrapper**: Electron main process support (`electron/main.js`)
-* **Frontend**: HTML5, Vanilla JavaScript, CSS3, Service Worker (PWA capabile)
+* **Frontend**: HTML5, Vanilla JavaScript, CSS3, Service Worker (PWA capable)
+
+---
 
 ## Overall Architecture
-The system uses a modularized layer-by-domain architecture under `src/`:
-* `src/modules/`: Functional domains isolated by business area. Each module manages its own controllers, routes, business logic, public exports, and module-specific `context.md`.
-* `src/shared/`: Cross-cutting concerns including database connectivity, global middlewares, and common response utilities.
-* `routes/`: Express top-level entry point mounting module public routers onto `/api/*`.
-
 ```
 d:/fun/
 ├── context.md                            # Master application context & AI protocol
@@ -43,9 +87,9 @@ d:/fun/
     │
     └── modules/
         ├── auth/                         # Authentication & Token management
-        ├── dashboard/                    # System metrics & Overview stats
-        ├── organization/                 # Multi-organization administration
-        ├── shops/                        # Shop & Branch management
+        ├── dashboard/                    # Admin, Owner & Branch dashboards
+        ├── organization/                 # Organization CRUD & Owner assignment
+        ├── shops/                        # Branch/Shop management
         ├── users/                        # Users, Staff & RBAC Roles
         ├── inventory/                    # Items, Categories, Units & Stock logs
         ├── customers/                    # Customers, Suppliers, People & Ledgers
@@ -55,6 +99,8 @@ d:/fun/
         ├── settings/                     # Shop configurations & Tax settings
         └── notifications/                # In-app notifications & Audit logging
 ```
+
+---
 
 ## Module Registry
 
@@ -73,36 +119,15 @@ d:/fun/
 | **Settings** | `/src/modules/settings` | `/src/modules/settings/context.md` |
 | **Notifications & Audit** | `/src/modules/notifications` | `/src/modules/notifications/context.md` |
 
-## Authentication & Authorization Architecture
-1. **JWT Authentication**: Tokens carry `id`, `username`, `role`, `shop_id`, `organization_id`, and `permissions`.
-2. **Context Extraction**: `auth` middleware verifies tokens from headers/cookies and injects `req.user` into every request.
-3. **Role-Based Access Control (RBAC)**: `rbac` middleware enforces permission checks against user role/permission array before controller execution.
-4. **Data Isolation**: Database queries dynamically filter records by `shop_id` or `organization_id` ensuring tenant isolation.
+---
 
 ## Database Architecture
-Dual-driver engine:
+Dual-driver engine with automatic schema migrations:
 * Primary local driver: `better-sqlite3` executing synchronous WAL queries.
 * Cloud PostgreSQL driver: `pg` pool dynamically translating SQLite `?` parameters to `$1, $2` and `PRAGMA` queries to Information Schema queries.
-* Core entities: `organizations`, `shops`, `users`, `roles`, `items`, `categories`, `units`, `customers`, `bills`, `bill_items`, `stock_logs`, `approvals`, `settings`, `notifications`, `audit_logs`.
+* Core entities: `organizations` (with subscription tracking), `shops` (branches), `users`, `roles`, `items`, `categories`, `units`, `customers`, `people`, `purchases`, `bills`, `bill_items`, `payments`, `ledgers`, `stock_logs`, `approvals`, `settings`, `notifications`, `audit_logs`.
 
-## Module Dependency Map
-```
-Authentication (auth)
-  ↓
-Organization & Shop Management (organization / shops)
-  ↓
-User Management & RBAC (users)
-  ↓
-Inventory Management (inventory)
-  ├──> Billing & POS (billing)
-  └──> Reports & Analytics (reports)
-  ↓
-Customers & Parties (customers)
-  ├──> Billing & POS (billing)
-  └──> Reports & Analytics (reports)
-  ↓
-Approvals & Audit (approvals / notifications)
-```
+---
 
 ## AI / Antigravity Development Protocol
 
@@ -118,9 +143,3 @@ Before modifying any module:
 8. After completing a change, update the relevant `context.md`.
 9. If architecture, shared behaviour or cross-module dependencies change, update the root `/context.md`.
 10. Never treat `context.md` as more authoritative than the actual working implementation when they conflict. Investigate the discrepancy and update the documentation.
-
-## Git & Branching Strategy
-Develop each module on isolated branches following standard naming:
-* `feature/<module>-*` (e.g. `feature/inventory-stock-adjust`)
-* `fix/<module>-*` (e.g. `fix/billing-tax-calc`)
-* `refactor/<module>-*` (e.g. `refactor/users-rbac-cache`)

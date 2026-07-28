@@ -280,6 +280,10 @@ async function initNeonDatabase() {
                 email VARCHAR(150),
                 phone VARCHAR(50),
                 status VARCHAR(20) DEFAULT 'active',
+                subscription_plan VARCHAR(50) DEFAULT 'Standard',
+                subscription_status VARCHAR(50) DEFAULT 'Active',
+                subscription_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                subscription_expiry TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -303,6 +307,11 @@ async function initNeonDatabase() {
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS email VARCHAR(150);
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_date DATE;
             ALTER TABLE shops ADD COLUMN IF NOT EXISTS manager VARCHAR(150);
+
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_plan VARCHAR(50) DEFAULT 'Standard';
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT 'Active';
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_expiry TIMESTAMP;
 
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_modes_split TEXT;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

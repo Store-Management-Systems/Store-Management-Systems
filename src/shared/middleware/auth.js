@@ -20,9 +20,9 @@ const authenticate = (req, res, next) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded;
 
-        // Allow Admin to switch active shop view via x-shop-id header or query param
+        // Allow Admin or Owner to switch active shop view via x-shop-id header or query param
         const targetShopId = req.headers['x-shop-id'] || req.query.shop_id;
-        if (req.user.role === 'Admin' && targetShopId) {
+        if (targetShopId && (req.user.role === 'Admin' || req.user.role === 'Owner')) {
             req.user.active_shop_id = targetShopId;
         } else {
             req.user.active_shop_id = req.user.shop_id;

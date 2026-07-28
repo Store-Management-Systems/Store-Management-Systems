@@ -52,7 +52,15 @@ const login = async (req, res) => {
         if (user.role === 'Admin') {
             ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
         } else {
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(user.id, user.shop_id);
+            const orgId = user.organization_id || '';
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id);
+        }
+
+        let orgDetails = null;
+        if (user.organization_id) {
+            orgDetails = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
+        } else if (user.role === 'Owner') {
+            orgDetails = await db.prepare('SELECT * FROM organizations WHERE owner_id = ?').get(user.id);
         }
 
         const payload = {
@@ -62,19 +70,20 @@ const login = async (req, res) => {
             email: user.email,
             role: user.role,
             shop_id: user.shop_id,
+            organization_id: user.organization_id || (orgDetails ? orgDetails.id : null),
             permissions
         };
 
         const token = jwt.sign(
             payload,
             process.env.JWT_SECRET || JWT_SECRET,
-            { expiresIn: '15m' }
+            { expiresIn: '8h' }
         );
 
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 15 * 60 * 1000
+            maxAge: 8 * 60 * 60 * 1000
         });
 
         await logAudit(user.shop_id, user.id, 'Login', `User ${user.username} logged in successfully`);
@@ -88,6 +97,8 @@ const login = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 shop_id: user.shop_id,
+                organization_id: payload.organization_id,
+                organization: orgDetails || null,
                 permissions,
                 branches: ownedShops,
                 shop: shop ? {
@@ -110,7 +121,7 @@ const login = async (req, res) => {
 
 const getMe = async (req, res) => {
     try {
-        const user = await db.prepare('SELECT id, name, username, email, role, shop_id, permissions, status, phone FROM users WHERE id = ?').get(req.user.id);
+        const user = await db.prepare('SELECT id, name, username, email, role, shop_id, organization_id, permissions, status, phone FROM users WHERE id = ?').get(req.user.id);
 
         if (!user) {
             return error(res, 'User session invalid', 401);
@@ -121,7 +132,15 @@ const getMe = async (req, res) => {
         if (user.role === 'Admin') {
             ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
         } else {
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(user.id, user.shop_id);
+            const orgId = user.organization_id || '';
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id);
+        }
+
+        let orgDetails = null;
+        if (user.organization_id) {
+            orgDetails = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
+        } else if (user.role === 'Owner') {
+            orgDetails = await db.prepare('SELECT * FROM organizations WHERE owner_id = ?').get(user.id);
         }
 
         let permissions = [];
@@ -133,6 +152,8 @@ const getMe = async (req, res) => {
 
         return success(res, 'User session valid', {
             ...user,
+            organization_id: user.organization_id || (orgDetails ? orgDetails.id : null),
+            organization: orgDetails || null,
             permissions,
             branches: ownedShops,
             shop: shop ? {
