@@ -162,17 +162,7 @@ async function checkAuth() {
 
       resetInactivityTimer();
 
-      try {
-        if (currentUser.branches && currentUser.branches.length > 1) {
-          loadMultiBranchDropdown();
-        } else if (currentUser.role === 'Admin') {
-          loadAdminShops();
-        } else {
-          const el = document.getElementById('topbarAdminShopSelect');
-          if (el) el.style.display = 'none';
-        }
-      } catch (err) { console.error('Branch dropdown error:', err); }
-
+      try { updateRoleUI(); } catch (err) { console.error('Role UI update error:', err); }
       try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
       try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
@@ -245,17 +235,7 @@ async function handleLoginSubmit(e) {
 
       resetInactivityTimer();
 
-      try {
-        if (currentUser.branches && currentUser.branches.length > 1) {
-          loadMultiBranchDropdown();
-        } else if (currentUser.role === 'Admin') {
-          loadAdminShops();
-        } else {
-          const el = document.getElementById('topbarAdminShopSelect');
-          if (el) el.style.display = 'none';
-        }
-      } catch (err) { console.error('Branch dropdown error:', err); }
-
+      try { updateRoleUI(); } catch (err) { console.error('Role UI update error:', err); }
       try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
       try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
@@ -401,6 +381,51 @@ function updateTopbar() {
     if (pillName) pillName.textContent = currentUser.name || currentUser.username;
     if (pillRole) pillRole.textContent = currentUser.role || 'STAFF';
     if (avatarCircle) avatarCircle.textContent = (currentUser.name || currentUser.username || 'A').charAt(0).toUpperCase();
+  }
+}
+
+function updateRoleUI() {
+  if (!currentUser) return;
+  const role = currentUser.role;
+
+  const adminShopSelect = document.getElementById('topbarAdminShopSelect');
+  const sideOrgs = document.getElementById('side-organizations');
+  const sidePeople = document.getElementById('side-people');
+  const sideStock = document.getElementById('side-stock');
+  const sideBill = document.getElementById('side-bill');
+  const sideAnalytics = document.getElementById('side-analytics');
+
+  if (role === 'Admin') {
+    // 1. Hide topbar shop switcher for Admin (Superadmin manages Organizations, not individual branch switching)
+    if (adminShopSelect) adminShopSelect.style.display = 'none';
+
+    // 2. Show Admin-specific sidebar items & hide operational items (POS Billing, Stock, Parties)
+    if (sideOrgs) sideOrgs.style.display = 'flex';
+    if (sidePeople) sidePeople.style.display = 'none';
+    if (sideStock) sideStock.style.display = 'none';
+    if (sideBill) sideBill.style.display = 'none';
+    if (sideAnalytics) sideAnalytics.style.display = 'none';
+  } else if (role === 'Owner') {
+    // Owner sees branch selector if multiple branches exist for their organization
+    if (currentUser.branches && currentUser.branches.length > 1) {
+      loadMultiBranchDropdown();
+    } else if (adminShopSelect) {
+      adminShopSelect.style.display = 'none';
+    }
+
+    if (sideOrgs) sideOrgs.style.display = 'none';
+    if (sidePeople) sidePeople.style.display = 'flex';
+    if (sideStock) sideStock.style.display = 'flex';
+    if (sideBill) sideBill.style.display = 'flex';
+    if (sideAnalytics) sideAnalytics.style.display = 'flex';
+  } else {
+    // Manager / Staff
+    if (adminShopSelect) adminShopSelect.style.display = 'none';
+    if (sideOrgs) sideOrgs.style.display = 'none';
+    if (sidePeople) sidePeople.style.display = 'flex';
+    if (sideStock) sideStock.style.display = 'flex';
+    if (sideBill) sideBill.style.display = 'flex';
+    if (sideAnalytics) sideAnalytics.style.display = 'flex';
   }
 }
 
