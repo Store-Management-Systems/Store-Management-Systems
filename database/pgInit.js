@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_X23EGjmybNrO@ep-old-waterfall-ay86a9u4-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require';
+const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_X23EGjmybNrO@ep-old-waterfall-ay86a9u4-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const pool = new Pool({
     connectionString,
