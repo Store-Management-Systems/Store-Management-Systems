@@ -138,6 +138,8 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('organizations', 'subscription_status', "TEXT DEFAULT 'Active'");
     addColIfMissing('organizations', 'subscription_start', 'DATETIME');
     addColIfMissing('organizations', 'subscription_expiry', 'DATETIME');
+    addColIfMissing('organizations', 'branding_config', 'TEXT');
+    addColIfMissing('shops', 'branding_config', 'TEXT');
     addColIfMissing('organizations', 'price_per_branch', 'REAL DEFAULT 999');
     addColIfMissing('organizations', 'active_branch_count', 'INTEGER DEFAULT 0');
     addColIfMissing('organizations', 'subscription_amount', 'REAL DEFAULT 0');
@@ -179,7 +181,7 @@ if (connectionString && connectionString.startsWith('postgres')) {
             CREATE TABLE IF NOT EXISTS platform_settings (
                 id TEXT PRIMARY KEY,
                 platform_name TEXT DEFAULT 'STORE MANAGEMENT SYSTEMS',
-                platform_logo TEXT DEFAULT 'logo.png',
+                platform_logo TEXT DEFAULT 'assets/logos/logo.png',
                 support_email TEXT DEFAULT 'support@storemanagementsystems.com',
                 support_phone TEXT DEFAULT '+1-800-SMS-SaaS',
                 default_currency TEXT DEFAULT '₹',
@@ -192,7 +194,7 @@ if (connectionString && connectionString.startsWith('postgres')) {
             );
 
             INSERT OR IGNORE INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
-            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise');
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise');
         `);
     } catch (e) {}
 

@@ -12,7 +12,7 @@ const getPlatformSettings = async (req, res) => {
             ps = {
                 id: 'ps_global',
                 platform_name: 'STORE MANAGEMENT SYSTEMS',
-                platform_logo: 'logo.png',
+                platform_logo: 'assets/logos/logo.png',
                 support_email: 'support@storemanagementsystems.com',
                 support_phone: '+1-800-SMS-SaaS',
                 default_currency: '₹',
@@ -87,6 +87,11 @@ const getOrganizationSettings = async (req, res) => {
         const org = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(targetOrgId);
         if (!org) return error(res, 'Organization not found', 404);
 
+        let brandingObj = null;
+        if (org.branding_config) {
+            try { brandingObj = typeof org.branding_config === 'string' ? JSON.parse(org.branding_config) : org.branding_config; } catch (e) {}
+        }
+
         return success(res, 'Organization Settings retrieved', {
             id: org.id,
             name: org.name,
@@ -99,7 +104,8 @@ const getOrganizationSettings = async (req, res) => {
             subscription_expiry: org.subscription_expiry,
             price_per_branch: org.price_per_branch,
             active_branch_count: org.active_branch_count,
-            subscription_amount: org.subscription_amount
+            subscription_amount: org.subscription_amount,
+            branding_config: brandingObj
         });
     } catch (err) {
         return error(res, err.message, 500);
@@ -113,19 +119,29 @@ const updateOrganizationSettings = async (req, res) => {
     }
 
     const targetOrgId = orgId || req.body.organization_id;
-    const { name, email, phone } = req.body;
+    const { name, email, phone, branding_config } = req.body;
 
     try {
+        let brandingStr = null;
+        if (branding_config !== undefined) {
+            brandingStr = typeof branding_config === 'object' ? JSON.stringify(branding_config) : branding_config;
+        }
+
         await db.prepare(`
             UPDATE organizations SET
                 name = COALESCE(?, name),
                 email = COALESCE(?, email),
                 phone = COALESCE(?, phone),
+                branding_config = COALESCE(?, branding_config),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `).run(name, email, phone, targetOrgId);
+        `).run(name, email, phone, brandingStr, targetOrgId);
 
-        await logAudit(targetOrgId, req.user.id, 'Update Organization Settings', 'Updated organization defaults');
+        if (branding_config && branding_config.logo && branding_config.logo_type === 'image') {
+            await db.prepare(`UPDATE shops SET logo = ?, updated_at = CURRENT_TIMESTAMP WHERE organization_id = ?`).run(branding_config.logo, targetOrgId);
+        }
+
+        await logAudit(targetOrgId, req.user.id, 'Update Organization Settings', 'Updated organization defaults & brand identity');
         return success(res, 'Organization Settings updated successfully');
     } catch (err) {
         return error(res, err.message, 500);

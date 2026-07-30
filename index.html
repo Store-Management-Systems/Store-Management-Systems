@@ -37,10 +37,10 @@
     <aside class="app-sidebar" id="appSidebar">
       <div class="sidebar-header">
         <a href="#" class="sidebar-brand" onclick="showSection('dashboard'); return false;">
-          <img src="logo.png" alt="SMS Logo" id="sidebarLogoImg">
+          <img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS Logo" id="sidebarLogoImg" class="sidebar-logo-img">
           <span class="sidebar-brand-name">STORE SYSTEMS</span>
         </a>
-        <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
+        <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle sidebar">
           ⚡
         </button>
       </div>
@@ -175,24 +175,23 @@
 
     <div class="login-card fade-in" id="loginCardContainer">
       <div class="login-logo" id="loginLogo">
-        <img src="logo.png" alt="SMS Logo">
+        <img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS Logo" class="login-logo-img">
       </div>
       <h2 class="login-title" id="loginShopName">STORE MANAGEMENT SYSTEMS</h2>
-      <p class="login-subtitle">Version - Beta UAT Testing</p>
+      <p class="login-subtitle">Enterprise SaaS ERP</p>
 
       <form id="loginForm" action="javascript:void(0);" onsubmit="handleLoginSubmit(event); return false;">
         <div class="form-group">
-          <label class="form-label">Username</label>
-          <input type="text" id="loginUsername" placeholder="e.g. admin" value="admin" required autocomplete="username" autofocus>
+          <label class="form-label" for="loginUsername">Username</label>
+          <input type="text" id="loginUsername" name="username" placeholder="Enter username" required autocomplete="username" autofocus>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Password</label>
-          <div style="position:relative;">
-            <input type="password" id="loginPassword" placeholder="e.g. admin123" value="admin123" required autocomplete="current-password">
-            <button type="button" onclick="togglePasswordVisibility()"
-              style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;font-size:12px;padding:4px;font-weight:700;cursor:pointer;">
-              👁 Show
+          <label class="form-label" for="loginPassword">Password</label>
+          <div class="password-input-wrapper" style="position:relative;">
+            <input type="password" id="loginPassword" name="password" placeholder="Enter password" required autocomplete="current-password">
+            <button type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()" aria-label="Show password" aria-pressed="false" class="password-toggle-btn">
+              <span id="togglePasswordIcon">👁</span> <span id="togglePasswordText">Show</span>
             </button>
           </div>
         </div>
@@ -203,7 +202,7 @@
             <input type="checkbox" id="rememberMe" checked style="width:auto;accent-color:#3b82f6;"> Remember Me
           </label>
           <span style="color:#3b82f6;cursor:pointer;font-weight:600;"
-            onclick="showToast('Password Reset', 'Contact system support at 9090684957 to reset credentials', 'info')">Forgot
+            onclick="showToast('Password Reset', 'Contact system support to reset credentials', 'info')">Forgot
             Password?</span>
         </div>
 
@@ -211,11 +210,6 @@
           🔐 Sign In
         </button>
       </form>
-
-      <div
-        style="margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.1);font-size:12px;color:#94a3b8;text-align:center;">
-        Default Admin Credentials: <strong style="color:#3b82f6;">admin</strong> / <strong style="color:#3b82f6;">admin123</strong>
-      </div>
     </div>
   </div>
 

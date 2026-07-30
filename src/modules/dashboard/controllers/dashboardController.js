@@ -12,39 +12,38 @@ const getDashboardStats = async (req, res) => {
         if (role === 'Admin') {
             const orgs = await db.prepare("SELECT * FROM organizations WHERE status != 'deleted' ORDER BY created_at DESC").all();
             const totalOrgs = orgs.length;
-            const activeOrgs = orgs.filter(o => o.status === 'active').length;
-            const inactiveOrgs = totalOrgs - activeOrgs;
+            const activeOrgs = orgs.filter(o => o.status === 'active');
+            const inactiveOrgs = orgs.filter(o => o.status === 'inactive');
 
-            let activeSubs = 0;
             let expiringSubs = 0;
             let expiredSubs = 0;
 
             const now = new Date();
-
             const enrichedOrgs = [];
+            const allBranchesList = [];
+
             for (const org of orgs) {
                 await recalculateOrganizationSubscription(org.id);
                 const freshOrg = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(org.id);
 
-                const allBranches = await db.prepare("SELECT id, name, shop_name, shop_code, status, created_at FROM shops WHERE organization_id = ? ORDER BY created_at DESC").all(org.id);
+                const allBranches = await db.prepare("SELECT id, name, shop_name, shop_code, status, created_at FROM shops WHERE organization_id = ? AND status != 'deleted' ORDER BY created_at DESC").all(org.id);
                 const activeBranches = allBranches.filter(b => b.status === 'active');
-                
+                const inactiveBranches = allBranches.filter(b => b.status === 'inactive');
+
                 let subStatus = freshOrg.subscription_status || 'Active';
+                let daysRemaining = null;
                 if (freshOrg.subscription_expiry) {
                     const expDate = new Date(freshOrg.subscription_expiry);
-                    const daysRemaining = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+                    daysRemaining = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
                     if (daysRemaining < 0) {
                         subStatus = 'Expired';
                         expiredSubs++;
-                    } else if (daysRemaining <= 15) {
+                    } else if (daysRemaining <= 10) {
                         subStatus = 'Expiring Soon';
                         expiringSubs++;
                     } else {
                         subStatus = 'Active';
-                        activeSubs++;
                     }
-                } else {
-                    activeSubs++;
                 }
 
                 let ownerUser = null;
@@ -55,11 +54,13 @@ const getDashboardStats = async (req, res) => {
                 const pricePerBranch = parseFloat(freshOrg.price_per_branch || 999);
                 const subAmount = activeBranches.length * pricePerBranch;
 
-                enrichedOrgs.push({
+                const orgItem = {
                     ...freshOrg,
                     subscription_status: subStatus,
-                    branches_count: allBranches.filter(b => b.status !== 'deleted').length,
+                    days_remaining: daysRemaining,
+                    branches_count: allBranches.length,
                     active_branches_count: activeBranches.length,
+                    inactive_branches_count: inactiveBranches.length,
                     price_per_branch: pricePerBranch,
                     subscription_amount: subAmount,
                     owner: ownerUser || { id: freshOrg.owner_id, name: freshOrg.owner_name || 'Unassigned', username: 'N/A' },
@@ -70,22 +71,44 @@ const getDashboardStats = async (req, res) => {
                         status: b.status,
                         is_billable: b.status === 'active'
                     }))
-                });
+                };
+
+                enrichedOrgs.push(orgItem);
+
+                for (const b of allBranches) {
+                    allBranchesList.push({
+                        id: b.id,
+                        name: b.shop_name || b.name,
+                        code: b.shop_code,
+                        status: b.status,
+                        created_at: b.created_at,
+                        organization_id: freshOrg.id,
+                        organization_name: freshOrg.name,
+                        organization_code: freshOrg.code,
+                        owner_name: ownerUser ? ownerUser.name : (freshOrg.owner_name || 'Unassigned')
+                    });
+                }
             }
+
+            const totalActiveBranches = allBranchesList.filter(b => b.status === 'active').length;
+            const totalInactiveBranches = allBranchesList.filter(b => b.status === 'inactive').length;
 
             return success(res, 'Admin organization & subscription dashboard loaded', {
                 mode: 'Admin',
                 metrics: {
                     totalOrganizations: totalOrgs,
-                    activeOrganizations: activeOrgs,
-                    inactiveOrganizations: inactiveOrgs,
+                    activeOrganizations: activeOrgs.length,
+                    inactiveOrganizations: inactiveOrgs.length,
+                    totalBranches: allBranchesList.length,
+                    activeBranches: totalActiveBranches,
+                    inactiveBranches: totalInactiveBranches,
                     subscriptions: {
-                        active: activeSubs,
                         expiringSoon: expiringSubs,
                         expired: expiredSubs
                     }
                 },
-                organizations: enrichedOrgs
+                organizations: enrichedOrgs,
+                branches: allBranchesList
             });
         }
 

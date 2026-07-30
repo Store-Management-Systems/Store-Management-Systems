@@ -14,7 +14,7 @@ let state = {
     address: '',
     phone: '',
     gst: '',
-    logo: 'logo.png',
+    logo: 'assets/logos/logo.png',
     currency: '₹',
     taxRate: 0,
     lowStockAlert: 5
@@ -294,7 +294,34 @@ async function handleLogout() {
 
 function togglePasswordVisibility() {
   const pwdInput = document.getElementById('loginPassword');
-  pwdInput.type = pwdInput.type === 'password' ? 'text' : 'password';
+  const btn = document.getElementById('togglePasswordBtn');
+  const icon = document.getElementById('togglePasswordIcon');
+  const text = document.getElementById('togglePasswordText');
+  if (!pwdInput) return;
+
+  const start = pwdInput.selectionStart;
+  const end = pwdInput.selectionEnd;
+
+  const isPassword = pwdInput.type === 'password';
+  pwdInput.type = isPassword ? 'text' : 'password';
+
+  if (btn) {
+    btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+    btn.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+  }
+  if (icon) {
+    icon.textContent = isPassword ? '🙈' : '👁';
+  }
+  if (text) {
+    text.textContent = isPassword ? 'Hide' : 'Show';
+  }
+
+  pwdInput.focus();
+  if (start !== null && end !== null) {
+    try {
+      pwdInput.setSelectionRange(start, end);
+    } catch (e) {}
+  }
 }
 
 // ─── Admin Multi-Shop Switcher ────────────────────────────────────────────────
@@ -366,11 +393,13 @@ function updateTopbar() {
   const loginShopNameEl = document.getElementById('loginShopName');
   const sidebarLogoImg = document.getElementById('sidebarLogoImg');
 
-  const logoSrc = (state.shop && state.shop.logo) ? state.shop.logo : 'logo.png';
+  let rawLogo = (state.shop && state.shop.logo) ? state.shop.logo : 'assets/logos/logo.png';
+  if (rawLogo === 'logo.png') rawLogo = 'assets/logos/logo.png';
+  const logoSrc = rawLogo;
   const shopTitle = (state.shop && state.shop.name) ? state.shop.name : 'STORE MANAGEMENT SYSTEMS';
 
   if (logoEl) {
-    logoEl.innerHTML = `<img src="${logoSrc}" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">`;
+    logoEl.innerHTML = `<img src="${logoSrc}" alt="STORE MANAGEMENT SYSTEMS Logo" class="app-logo-standard" style="width:100%;height:100%;object-fit:contain;border-radius:10px;">`;
   }
   if (sidebarLogoImg) {
     sidebarLogoImg.src = logoSrc;
@@ -379,7 +408,7 @@ function updateTopbar() {
     titleEl.textContent = shopTitle;
   }
   if (loginLogoEl) {
-    loginLogoEl.innerHTML = `<img src="${logoSrc}" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:20px;">`;
+    loginLogoEl.innerHTML = `<img src="${logoSrc}" alt="STORE MANAGEMENT SYSTEMS Logo" class="login-logo-img" style="width:100%;height:100%;object-fit:contain;border-radius:20px;">`;
   }
   if (loginShopNameEl) {
     loginShopNameEl.textContent = shopTitle;
@@ -458,7 +487,7 @@ async function loadInitialData() {
     if (peopleRes.success) state.people = peopleRes.data || [];
     if (settingsRes.success && settingsRes.data) {
       state.shop = { ...state.shop, ...settingsRes.data };
-      if (!state.shop.logo) state.shop.logo = 'logo.png';
+      if (!state.shop.logo || state.shop.logo === 'logo.png') state.shop.logo = 'assets/logos/logo.png';
     }
 
     updateTopbar();
@@ -544,42 +573,102 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
     // -------------------------------------------------------------
     if (stats.mode === 'Admin') {
       const m = stats.metrics || {};
-      const subs = m.subscriptions || { active: 0, expiringSoon: 0, expired: 0 };
+      const subs = m.subscriptions || { expiringSoon: 0, expired: 0 };
       const orgs = stats.organizations || [];
+      const branches = stats.branches || [];
+
+      window._adminDashboardState = { orgs, branches, metrics: m };
 
       c.innerHTML = `
       <div class="fade-in">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
           <div>
-            <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 Super Admin Dashboard</h2>
-            <div style="font-size:13px;color:var(--text-muted);">Manage Organizations, Branch-Based Subscriptions & Tenants</div>
+            <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 Platform Admin Dashboard</h2>
+            <div style="font-size:13px;color:var(--text-muted);">SaaS Control Panel — Organizations, Branches & Subscriptions</div>
           </div>
-          <button class="btn-primary" onclick="openCreateOrganizationModal()">➕ Create Organization</button>
+          <button class="btn-primary" onclick="openCreateOrganizationModal()">➕ Create New Organization</button>
         </div>
 
-        <div class="stats-grid" style="grid-template-columns:repeat(4, 1fr);">
-          <div class="stat-card">
-            <div class="stat-value" style="color:var(--ios-blue);">${m.totalOrganizations || 0}</div>
-            <div class="stat-label">Total Organizations</div>
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:24px;">
+          
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('active_orgs')" title="Click to view Active Organizations">
+            <div class="stat-header">
+              <span class="stat-title">Active Organizations</span>
+              <span class="stat-icon" style="background:rgba(34,197,94,0.15);color:#16a34a;">🏢</span>
+            </div>
+            <div class="stat-value" style="color:#16a34a;">${m.activeOrganizations || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Operational Tenants</span>
+              <span style="font-weight:700;color:#16a34a;">View List →</span>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color:var(--ios-green);">${m.activeOrganizations || 0}</div>
-            <div class="stat-label">Active Organizations</div>
+
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('active_branches')" title="Click to view Active Branches">
+            <div class="stat-header">
+              <span class="stat-title">Active Branches</span>
+              <span class="stat-icon" style="background:rgba(37,99,235,0.15);color:#2563eb;">📍</span>
+            </div>
+            <div class="stat-value" style="color:#2563eb;">${m.activeBranches || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Billable Locations</span>
+              <span style="font-weight:700;color:#2563eb;">View List →</span>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color:var(--ios-orange);">${subs.expiringSoon || 0}</div>
-            <div class="stat-label">Expiring Subscriptions</div>
+
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('inactive_orgs')" title="Click to view Inactive Organizations">
+            <div class="stat-header">
+              <span class="stat-title">Inactive Organizations</span>
+              <span class="stat-icon" style="background:rgba(100,116,139,0.15);color:#64748b;">⏸</span>
+            </div>
+            <div class="stat-value" style="color:#64748b;">${m.inactiveOrganizations || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Suspended Tenants</span>
+              <span style="font-weight:700;color:#64748b;">View List →</span>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" style="color:var(--ios-red);">${subs.expired || 0}</div>
-            <div class="stat-label">Expired Subscriptions</div>
+
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('inactive_branches')" title="Click to view Inactive Branches">
+            <div class="stat-header">
+              <span class="stat-title">Inactive Branches</span>
+              <span class="stat-icon" style="background:rgba(245,158,11,0.15);color:#d97706;">📍</span>
+            </div>
+            <div class="stat-value" style="color:#d97706;">${m.inactiveBranches || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Paused Stores</span>
+              <span style="font-weight:700;color:#d97706;">View List →</span>
+            </div>
           </div>
+
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('expiring_subs')" title="Click to view Expiring Subscriptions">
+            <div class="stat-header">
+              <span class="stat-title">Expiring in 10 Days</span>
+              <span class="stat-icon" style="background:rgba(245,158,11,0.15);color:#f59e0b;">⏳</span>
+            </div>
+            <div class="stat-value" style="color:#f59e0b;">${subs.expiringSoon || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Needs Renewal</span>
+              <span style="font-weight:700;color:#f59e0b;">View List →</span>
+            </div>
+          </div>
+
+          <div class="stat-card clickable-card" onclick="showKPIDetailModal('expired_subs')" title="Click to view Expired Subscriptions">
+            <div class="stat-header">
+              <span class="stat-title">Expired Subscriptions</span>
+              <span class="stat-icon" style="background:rgba(239,68,68,0.15);color:#ef4444;">⚠️</span>
+            </div>
+            <div class="stat-value" style="color:#ef4444;">${subs.expired || 0}</div>
+            <div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Access Disabled</span>
+              <span style="font-weight:700;color:#ef4444;">View List →</span>
+            </div>
+          </div>
+
         </div>
 
-        <div class="card" style="margin-top:16px;">
+        <div class="card">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-            <h3>🏢 Organization Directory & Branch-Based Subscriptions</h3>
-            <button class="btn-sm btn-secondary" onclick="openOrganizationsModal()">⚙ Manage Directory</button>
+            <h3>🏢 Organization & Subscription Directory</h3>
+            <span style="font-size:12px;color:var(--text-muted);">Total Organizations: <strong>${orgs.length}</strong></span>
           </div>
           <div style="overflow-x:auto;">
             <table class="data-table">
@@ -607,20 +696,24 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                       <td><code>${o.code}</code></td>
                       <td>
                         <div style="font-weight:600;">${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</div>
-                        <div style="font-size:11px;color:var(--text-muted);">${o.owner ? '@' + o.owner.username : ''}</div>
+                        <div style="font-size:11px;color:var(--text-muted);">${o.owner && o.owner.username ? '@' + o.owner.username : ''}</div>
                       </td>
                       <td style="font-weight:700;color:var(--ios-blue);">${activeCount} Active Branch${activeCount !== 1 ? 'es' : ''}</td>
                       <td style="font-weight:600;">${state.shop.currency}${fmtNum(pricePerBranch, 0)}</td>
                       <td style="font-weight:800;color:var(--ios-green);font-size:15px;">${state.shop.currency}${fmtNum(subAmount, 0)} <span style="font-size:10px;font-weight:400;color:var(--text-muted);">(${activeCount} × ${state.shop.currency}${pricePerBranch})</span></td>
                       <td>
                         <span class="badge badge-info">${o.subscription_plan || 'Standard'}</span>
-                        <span class="badge ${o.subscription_status === 'Expired' ? 'badge-danger' : (o.subscription_status === 'Expiring Soon' ? 'badge-warning' : 'badge-success')}">${o.subscription_status || 'Active'}</span>
+                        <span class="badge ${o.status === 'inactive' ? 'badge-warning' : (o.subscription_status === 'Expired' ? 'badge-danger' : (o.subscription_status === 'Expiring Soon' ? 'badge-warning' : 'badge-success'))}">${o.status === 'inactive' ? 'Inactive' : (o.subscription_status || 'Active')}</span>
                       </td>
                       <td>
                         <div style="display:flex;gap:4px;">
-                          <button class="btn-sm btn-secondary" onclick="openOrganizationDetailsModal('${o.id}')" title="View Subscription Details & Breakdown">🔍 Details</button>
-                          <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')" title="Edit / Assign Owner">✏ Edit</button>
-                          <button class="btn-sm btn-danger" onclick="confirmDeleteOrganizationModal('${o.id}', '${o.name}')" title="Delete Organization & Cascade Branches">🗑 Delete</button>
+                          <button class="btn-sm btn-secondary" onclick="openOrganizationDetailsModal('${o.id}')" title="View Organization Details">🔍 View</button>
+                          <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')" title="Edit Organization">✏ Edit</button>
+                          ${o.status === 'active' 
+                            ? `<button class="btn-sm btn-warning" onclick="toggleOrganizationStatus('${o.id}', 'inactive')" title="Deactivate Organization">⏸ Deactivate</button>` 
+                            : `<button class="btn-sm btn-success" onclick="toggleOrganizationStatus('${o.id}', 'active')" title="Activate Organization">▶ Activate</button>`
+                          }
+                          <button class="btn-sm btn-danger" onclick="confirmDeleteOrganizationModal('${o.id}', '${o.name}')" title="Delete Organization">🗑 Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -3418,7 +3511,6 @@ async function openOrganizationsModal() {
     const orgs = res.data || [];
 
     const orgsHtml = `
-      <button class="btn-primary" style="width:100%;margin-bottom:14px;" onclick="openCreateOrganizationModal()">➕ Create New Organization</button>
       <div style="max-height:360px;overflow-y:auto;">
         ${orgs.length === 0 ? '<div class="empty-state" style="padding:20px;"><p>No organizations created yet</p></div>' :
           orgs.map(o => `
@@ -3428,7 +3520,7 @@ async function openOrganizationsModal() {
                   <div style="font-weight:700;font-size:15px;color:var(--text-primary);">${o.name} (${o.code})</div>
                   <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Owner: <strong>${o.owner_name || 'N/A'}</strong> ${o.email ? '· ' + o.email : ''} ${o.phone ? '· 📞 ' + o.phone : ''}</div>
                 </div>
-                <span class="badge badge-success">${o.status.toUpperCase()}</span>
+                <span class="badge ${o.status === 'inactive' ? 'badge-warning' : 'badge-success'}">${o.status.toUpperCase()}</span>
               </div>
               <div style="margin-top:8px;font-size:11px;color:var(--text-light);">
                 Owner has full authority to create branches and add users within this Organization.
@@ -3439,9 +3531,444 @@ async function openOrganizationsModal() {
       </div>
     `;
 
-    showModal('🏢 Organizations Management', orgsHtml);
+    showModal('🏢 Organizations Directory', orgsHtml);
   } catch (err) {
     alert(err.message || 'Failed to fetch organizations');
+  }
+}
+
+// ─── Interactive KPI Detail Modals for Platform Admin ───────────────────────
+function showKPIDetailModal(type) {
+  const data = window._adminDashboardState || {};
+  const orgs = data.orgs || [];
+  const branches = data.branches || [];
+
+  let title = '';
+  let contentHtml = '';
+
+  if (type === 'active_orgs') {
+    title = '🏢 Active Organizations Management';
+    const list = orgs.filter(o => o.status === 'active');
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} active operational organization tenants</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Plan</th>
+              <th>Active Branches</th>
+              <th>Subscription</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:16px;">No active organizations</td></tr>' :
+              list.map(o => `
+                <tr>
+                  <td style="font-weight:700;">${o.name} <div style="font-size:11px;color:var(--text-muted);">${o.code}</div></td>
+                  <td>${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</td>
+                  <td><span class="badge badge-info">${o.subscription_plan || 'Standard'}</span></td>
+                  <td style="font-weight:700;color:var(--ios-blue);">${o.active_branches_count || 0}</td>
+                  <td style="font-weight:700;color:var(--ios-green);">${state.shop.currency}${fmtNum(o.subscription_amount || 0, 0)}</td>
+                  <td><span class="badge badge-success">Active</span></td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openOrganizationDetailsModal('${o.id}')">🔍 View</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openEditOrganizationModal('${o.id}')">✏ Edit</button>
+                      <button class="btn-sm btn-warning" onclick="closeModal(); toggleOrganizationStatus('${o.id}', 'inactive')">⏸ Deactivate</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } else if (type === 'inactive_orgs') {
+    title = '⏸ Inactive Organizations Management';
+    const list = orgs.filter(o => o.status === 'inactive');
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} suspended or inactive organizations</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>Created Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:16px;">No inactive organizations</td></tr>' :
+              list.map(o => `
+                <tr>
+                  <td style="font-weight:700;">${o.name} <div style="font-size:11px;color:var(--text-muted);">${o.code}</div></td>
+                  <td>${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</td>
+                  <td><span class="badge badge-warning">Inactive</span></td>
+                  <td style="font-size:12px;">${o.created_at ? new Date(o.created_at).toLocaleDateString() : 'N/A'}</td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-success" onclick="closeModal(); toggleOrganizationStatus('${o.id}', 'active')">▶ Activate</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openOrganizationDetailsModal('${o.id}')">🔍 View</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } else if (type === 'active_branches') {
+    title = '📍 Active Branches Directory';
+    const list = branches.filter(b => b.status === 'active');
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} active billable branch locations</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Branch Name</th>
+              <th>Branch Code</th>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:16px;">No active branches</td></tr>' :
+              list.map(b => `
+                <tr>
+                  <td style="font-weight:700;">${b.name}</td>
+                  <td><code>${b.code}</code></td>
+                  <td>${b.organization_name}</td>
+                  <td>${b.owner_name}</td>
+                  <td><span class="badge badge-success">Active</span></td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-warning" onclick="closeModal(); toggleBranchStatus('${b.id}', 'inactive')">⏸ Deactivate</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openBranchDetailsModal('${b.id}')">🔍 View</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } else if (type === 'inactive_branches') {
+    title = '📍 Inactive Branches Directory';
+    const list = branches.filter(b => b.status === 'inactive');
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} paused or inactive branch locations</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Branch Name</th>
+              <th>Branch Code</th>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:16px;">No inactive branches</td></tr>' :
+              list.map(b => `
+                <tr>
+                  <td style="font-weight:700;">${b.name}</td>
+                  <td><code>${b.code}</code></td>
+                  <td>${b.organization_name}</td>
+                  <td>${b.owner_name}</td>
+                  <td><span class="badge badge-warning">Inactive</span></td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-success" onclick="closeModal(); toggleBranchStatus('${b.id}', 'active')">▶ Activate</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openBranchDetailsModal('${b.id}')">🔍 View</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } else if (type === 'expiring_subs') {
+    title = '⏳ Expiring Subscriptions (Within 10 Days)';
+    const list = orgs.filter(o => o.subscription_status === 'Expiring Soon' || (o.days_remaining !== null && o.days_remaining >= 0 && o.days_remaining <= 10));
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} subscriptions requiring upcoming renewal</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Plan</th>
+              <th>Branch Count</th>
+              <th>Expiry Date</th>
+              <th>Days Remaining</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:16px;">No subscriptions expiring within 10 days</td></tr>' :
+              list.map(o => `
+                <tr>
+                  <td style="font-weight:700;">${o.name}</td>
+                  <td>${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</td>
+                  <td><span class="badge badge-info">${o.subscription_plan || 'Standard'}</span></td>
+                  <td style="font-weight:700;color:var(--ios-blue);">${o.active_branches_count || 0}</td>
+                  <td>${o.subscription_expiry ? new Date(o.subscription_expiry).toLocaleDateString() : 'N/A'}</td>
+                  <td style="font-weight:700;color:var(--ios-orange);">${o.days_remaining !== null ? o.days_remaining + ' days' : 'Expiring Soon'}</td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-success" onclick="closeModal(); openRenewSubscriptionModal('${o.id}')">🔄 Renew</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openOrganizationDetailsModal('${o.id}')">🔍 View</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  } else if (type === 'expired_subs') {
+    title = '⚠️ Expired Subscriptions';
+    const list = orgs.filter(o => o.subscription_status === 'Expired' || (o.days_remaining !== null && o.days_remaining < 0));
+    contentHtml = `
+      <div style="margin-bottom:12px;font-size:13px;color:var(--text-muted);">Displaying ${list.length} expired subscriptions</div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Organization</th>
+              <th>Owner</th>
+              <th>Expired Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:16px;">No expired subscriptions</td></tr>' :
+              list.map(o => `
+                <tr>
+                  <td style="font-weight:700;">${o.name}</td>
+                  <td>${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</td>
+                  <td>${o.subscription_expiry ? new Date(o.subscription_expiry).toLocaleDateString() : 'Expired'}</td>
+                  <td><span class="badge badge-danger">Expired</span></td>
+                  <td>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn-sm btn-success" onclick="closeModal(); openRenewSubscriptionModal('${o.id}')">🔄 Renew & Activate</button>
+                      <button class="btn-sm btn-secondary" onclick="closeModal(); openOrganizationDetailsModal('${o.id}')">🔍 View</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+            }
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  showModal(title, contentHtml);
+}
+
+async function toggleOrganizationStatus(id, newStatus) {
+  try {
+    const res = await apiFetch(`/organizations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (res.success) {
+      showToast('Success', `Organization status set to ${newStatus}`, 'success');
+      renderDashboard(document.getElementById('mainContent'));
+    } else {
+      showToast('Error', res.message || 'Failed to update status', 'error');
+    }
+  } catch (e) {
+    showToast('Error', e.message, 'error');
+  }
+}
+
+async function toggleBranchStatus(id, newStatus) {
+  try {
+    const res = await apiFetch(`/shops/${id}/status`, {
+      method: 'POST'
+    });
+    if (res.success) {
+      showToast('Success', `Branch status updated`, 'success');
+      renderDashboard(document.getElementById('mainContent'));
+    } else {
+      showToast('Error', res.message || 'Failed to update branch status', 'error');
+    }
+  } catch (e) {
+    showToast('Error', e.message, 'error');
+  }
+}
+
+async function openOrganizationDetailsModal(orgId) {
+  try {
+    const res = await apiFetch(`/organizations/${orgId}`);
+    if (!res.success || !res.data) throw new Error(res.message);
+    const o = res.data;
+
+    const content = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="background:var(--bg-main);padding:16px;border-radius:12px;border:1px solid var(--border-light);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);">${o.name}</h3>
+              <div style="font-size:12px;color:var(--text-muted);">Code: <code>${o.code}</code> · ID: ${o.id}</div>
+            </div>
+            <span class="badge ${o.status === 'inactive' ? 'badge-warning' : (o.subscription_status === 'Expired' ? 'badge-danger' : 'badge-success')}">${o.status === 'inactive' ? 'Inactive' : o.subscription_status}</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div style="background:var(--bg-surface);padding:12px;border-radius:10px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Owner Information</div>
+            <div style="font-weight:700;font-size:14px;margin-top:4px;">${o.owner ? o.owner.name : o.owner_name}</div>
+            <div style="font-size:12px;color:var(--text-secondary);">${o.owner && o.owner.email ? o.owner.email : (o.email || 'No email')}</div>
+            <div style="font-size:12px;color:var(--text-secondary);">${o.owner && o.owner.phone ? o.owner.phone : (o.phone || 'No phone')}</div>
+          </div>
+          <div style="background:var(--bg-surface);padding:12px;border-radius:10px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Subscription Summary</div>
+            <div style="font-weight:800;font-size:16px;color:var(--color-primary);margin-top:4px;">${o.active_branches_count || 0} Active Branches</div>
+            <div style="font-size:13px;font-weight:700;color:var(--color-success);">${state.shop.currency}${fmtNum(o.subscription_amount || 0, 0)} / period</div>
+            <div style="font-size:11px;color:var(--text-muted);">Plan: ${o.subscription_plan || 'Standard'}</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="font-size:14px;font-weight:700;margin-bottom:8px;">Associated Branches (${(o.branches || []).length})</h4>
+          <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border-light);border-radius:8px;">
+            <table class="data-table" style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th>Branch Name</th>
+                  <th>Code</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${!(o.branches && o.branches.length) ? '<tr><td colspan="3" style="text-align:center;">No branches</td></tr>' :
+                  o.branches.map(b => `
+                    <tr>
+                      <td style="font-weight:600;">${b.name || b.shop_name}</td>
+                      <td><code>${b.shop_code}</code></td>
+                      <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status}</span></td>
+                    </tr>
+                  `).join('')
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--border-light);">
+          ${o.status === 'active'
+            ? `<button class="btn-secondary" style="color:var(--color-warning);" onclick="closeModal(); toggleOrganizationStatus('${o.id}', 'inactive');">⏸ Deactivate Organization</button>`
+            : `<button class="btn-success" onclick="closeModal(); toggleOrganizationStatus('${o.id}', 'active');">▶ Activate Organization</button>`
+          }
+          <button class="btn-danger" onclick="closeModal(); confirmDeleteOrganizationModal('${o.id}', '${o.name}');">🗑 Delete Organization</button>
+        </div>
+      </div>`;
+
+    showModal(`🏢 Organization Details — ${o.name}`, content);
+  } catch (e) {
+    showToast('Error', e.message, 'error');
+  }
+}
+
+async function openBranchDetailsModal(branchId) {
+  try {
+    const res = await apiFetch(`/shops/${branchId}`);
+    if (!res.success || !res.data) throw new Error(res.message);
+    const b = res.data;
+
+    const content = `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="background:var(--bg-main);padding:16px;border-radius:12px;border:1px solid var(--border-light);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <h3 style="font-size:18px;font-weight:800;color:var(--text-primary);">${b.shop_name || b.name}</h3>
+              <div style="font-size:12px;color:var(--text-muted);">Code: <code>${b.shop_code}</code> · ID: ${b.id}</div>
+            </div>
+            <span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status}</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div style="background:var(--bg-surface);padding:12px;border-radius:10px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Organization</div>
+            <div style="font-weight:700;font-size:14px;margin-top:4px;">${b.organization_name || 'Assigned Tenant'}</div>
+            <div style="font-size:12px;color:var(--text-secondary);">Org ID: ${b.organization_id || 'N/A'}</div>
+          </div>
+          <div style="background:var(--bg-surface);padding:12px;border-radius:10px;border:1px solid var(--border-light);">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;">Branch Details</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Address: ${b.address || 'Not specified'}</div>
+            <div style="font-size:12px;color:var(--text-secondary);">Created: ${b.created_at ? new Date(b.created_at).toLocaleDateString() : 'N/A'}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--border-light);">
+          ${b.status === 'active'
+            ? `<button class="btn-secondary" style="color:var(--color-warning);" onclick="closeModal(); toggleBranchStatus('${b.id}', 'inactive');">⏸ Deactivate Branch</button>`
+            : `<button class="btn-success" onclick="closeModal(); toggleBranchStatus('${b.id}', 'active');">▶ Activate Branch</button>`
+          }
+          <button class="btn-danger" onclick="closeModal(); confirmDeleteBranchModal('${b.id}', '${b.shop_name || b.name}');">🗑 Delete Branch</button>
+        </div>
+      </div>`;
+
+    showModal(`📍 Branch Details — ${b.shop_name || b.name}`, content);
+  } catch (e) {
+    showToast('Error', e.message, 'error');
+  }
+}
+
+function openRenewSubscriptionModal(orgId) {
+  showModal('🔄 Renew Subscription', `
+    <div style="padding:10px;">
+      <div style="margin-bottom:12px;font-size:14px;color:var(--text-primary);">Select renewal period to extend organization subscription:</div>
+      <div class="form-group">
+        <label class="form-label">Extend Expiry Date</label>
+        <input type="date" id="renewExpiryInput" value="${new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0]}" class="form-control">
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="submitRenewSubscription('${orgId}')">✅ Confirm Subscription Renewal</button>
+    </div>
+  `);
+}
+
+async function submitRenewSubscription(orgId) {
+  const expiry = document.getElementById('renewExpiryInput').value;
+  if (!expiry) return alert('Please select expiry date');
+
+  try {
+    const res = await apiFetch(`/organizations/${orgId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        subscription_expiry: expiry,
+        subscription_status: 'Active',
+        status: 'active'
+      })
+    });
+
+    if (res.success) {
+      showToast('Success', 'Subscription renewed successfully!', 'success');
+      closeModal();
+      renderDashboard(document.getElementById('mainContent'));
+    } else {
+      showToast('Error', res.message || 'Renewal failed', 'error');
+    }
+  } catch (e) {
+    showToast('Error', e.message, 'error');
   }
 }
 
@@ -4566,6 +5093,145 @@ window.addEventListener('keydown', (e) => {
     closeModal();
   }
 });
+
+// ─── Organization Branding System Functions ────────────────────────────────
+function renderOrgBrandElement(config, defaultText = 'STORE MANAGEMENT SYSTEMS') {
+  if (!config) {
+    return `<img src="assets/logos/logo.png" alt="${defaultText}" class="app-logo-standard" style="width:100%;height:100%;object-fit:contain;">`;
+  }
+
+  if (config.logo_type === 'image' && config.logo) {
+    return `<img src="${config.logo}" alt="${defaultText}" class="app-logo-standard" style="width:100%;height:100%;object-fit:contain;" onerror="this.onerror=null; this.outerHTML='<div class=\\'brand-text-logo\\'>${defaultText}</div>';">`;
+  }
+
+  if (config.logo_type === 'text' || config.text_logo_text) {
+    const text = config.text_logo_text || defaultText;
+    const weight = config.text_logo_font_weight || '700';
+    const size = config.text_logo_font_size || '20px';
+    const color = config.text_logo_color || '#ffffff';
+    const letterSpacing = config.text_logo_letter_spacing || '0.05em';
+    const alignment = config.text_logo_alignment || 'center';
+
+    return `<div class="brand-text-logo" style="font-weight:${weight};font-size:${size};color:${color};letter-spacing:${letterSpacing};text-align:${alignment};line-height:1.2;text-transform:uppercase;">${text}</div>`;
+  }
+
+  return `<img src="assets/logos/logo.png" alt="${defaultText}" class="app-logo-standard" style="width:100%;height:100%;object-fit:contain;">`;
+}
+
+function toggleBrandingModeUI(mode) {
+  const imgBox = document.getElementById('brandImageUploadBox');
+  const txtBox = document.getElementById('brandTextSettingsBox');
+  if (mode === 'text') {
+    if (imgBox) imgBox.style.display = 'none';
+    if (txtBox) txtBox.style.display = 'block';
+  } else {
+    if (imgBox) imgBox.style.display = 'block';
+    if (txtBox) txtBox.style.display = 'none';
+  }
+  updateBrandLivePreview();
+}
+
+let _uploadedBrandImageBase64 = null;
+
+function handleBrandImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+  if (!validTypes.includes(file.type)) {
+    showToast('Invalid File', 'Please upload a PNG, JPG, JPEG, or SVG image.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    _uploadedBrandImageBase64 = evt.target.result;
+    updateBrandLivePreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateBrandLivePreview() {
+  const previewBox = document.getElementById('brandLivePreviewBox');
+  if (!previewBox) return;
+
+  const selectedMode = document.querySelector('input[name="brandLogoMode"]:checked')?.value || 'image';
+  let config = { logo_type: selectedMode };
+
+  if (selectedMode === 'image') {
+    config.logo = _uploadedBrandImageBase64 || state.shop.logo || 'assets/logos/logo.png';
+  } else {
+    const textInput = document.getElementById('brandTextLogoInput');
+    const weightSelect = document.getElementById('brandTextFontWeight');
+    const sizeSelect = document.getElementById('brandTextFontSize');
+    const colorInput = document.getElementById('brandTextColor');
+    const spacingSelect = document.getElementById('brandTextLetterSpacing');
+    const alignSelect = document.getElementById('brandTextAlignment');
+
+    config.text_logo_text = textInput ? textInput.value : state.shop.name;
+    config.text_logo_font_weight = weightSelect ? weightSelect.value : '700';
+    config.text_logo_font_size = sizeSelect ? sizeSelect.value : '20px';
+    config.text_logo_color = colorInput ? colorInput.value : '#ffffff';
+    config.text_logo_letter_spacing = spacingSelect ? spacingSelect.value : '0.05em';
+    config.text_logo_alignment = alignSelect ? alignSelect.value : 'center';
+  }
+
+  previewBox.innerHTML = renderOrgBrandElement(config, state.shop.name);
+}
+
+function resetBrandIdentityToDefault() {
+  _uploadedBrandImageBase64 = null;
+  const radioImage = document.querySelector('input[name="brandLogoMode"][value="image"]');
+  if (radioImage) radioImage.checked = true;
+
+  toggleBrandingModeUI('image');
+
+  const fileInput = document.getElementById('brandLogoFileInput');
+  if (fileInput) fileInput.value = '';
+
+  const previewBox = document.getElementById('brandLivePreviewBox');
+  if (previewBox) {
+    previewBox.innerHTML = `<img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS" class="app-logo-standard" style="width:100%;height:100%;object-fit:contain;">`;
+  }
+
+  showToast('Reset', 'Brand identity reset to default STORE MANAGEMENT SYSTEMS logo.', 'info');
+}
+
+async function saveBrandIdentitySettings() {
+  const selectedMode = document.querySelector('input[name="brandLogoMode"]:checked')?.value || 'image';
+
+  let brandingConfig = { logo_type: selectedMode };
+
+  if (selectedMode === 'image') {
+    brandingConfig.logo = _uploadedBrandImageBase64 || state.shop.logo || 'assets/logos/logo.png';
+  } else {
+    brandingConfig.text_logo_text = document.getElementById('brandTextLogoInput')?.value || state.shop.name;
+    brandingConfig.text_logo_font_weight = document.getElementById('brandTextFontWeight')?.value || '700';
+    brandingConfig.text_logo_font_size = document.getElementById('brandTextFontSize')?.value || '20px';
+    brandingConfig.text_logo_color = document.getElementById('brandTextColor')?.value || '#ffffff';
+    brandingConfig.text_logo_letter_spacing = document.getElementById('brandTextLetterSpacing')?.value || '0.05em';
+    brandingConfig.text_logo_alignment = document.getElementById('brandTextAlignment')?.value || 'center';
+  }
+
+  try {
+    const res = await apiFetch('/settings/organization', {
+      method: 'PUT',
+      body: JSON.stringify({ branding_config: brandingConfig })
+    });
+
+    if (res.success) {
+      showToast('Saved', 'Organization brand identity saved successfully!', 'success');
+      state.shop.branding_config = brandingConfig;
+      if (brandingConfig.logo_type === 'image' && brandingConfig.logo) {
+        state.shop.logo = brandingConfig.logo;
+      }
+    } else {
+      showToast('Error', res.message || 'Failed to save branding', 'error');
+    }
+  } catch (e) {
+    showToast('Error', e.message, 'error');
+  }
+}
 
 // ─── App Initialize ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

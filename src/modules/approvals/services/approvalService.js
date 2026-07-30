@@ -19,7 +19,7 @@ const executeApprovalPayload = async (approval) => {
                 await db.prepare(`
                     INSERT INTO shops (id, shop_name, name, shop_code, owner_id, address, phone, gst, currency, tax_rate, logo, status)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
-                `).run(shopId || ('shp_' + uuidv4().substring(0, 8)), shopName || name, name || shopName, shopCode, ownerId || approval.requester_id, address || null, phone || null, gst || null, currency || '₹', taxRate || 0, logo || 'logo.png');
+                `).run(shopId || ('shp_' + uuidv4().substring(0, 8)), shopName || name, name || shopName, shopCode, ownerId || approval.requester_id, address || null, phone || null, gst || null, currency || '₹', taxRate || 0, logo || 'assets/logos/logo.png');
             }
             await logAudit(shopId, approval.requester_id, 'Approve Branch', `Branch '${shopName || name}' approved and activated.`);
         }

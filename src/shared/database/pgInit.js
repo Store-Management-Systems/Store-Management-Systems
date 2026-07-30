@@ -298,7 +298,7 @@ async function initNeonDatabase() {
             CREATE TABLE IF NOT EXISTS platform_settings (
                 id VARCHAR(50) PRIMARY KEY,
                 platform_name VARCHAR(150) DEFAULT 'STORE MANAGEMENT SYSTEMS',
-                platform_logo TEXT DEFAULT 'logo.png',
+                platform_logo TEXT DEFAULT 'assets/logos/logo.png',
                 support_email VARCHAR(150) DEFAULT 'support@storemanagementsystems.com',
                 support_phone VARCHAR(50) DEFAULT '+1-800-SMS-SaaS',
                 default_currency VARCHAR(10) DEFAULT '₹',
@@ -311,7 +311,7 @@ async function initNeonDatabase() {
             );
 
             INSERT INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
-            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
             ON CONFLICT (id) DO NOTHING;
         `);
 
@@ -341,6 +341,8 @@ async function initNeonDatabase() {
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS price_per_branch NUMERIC DEFAULT 999;
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_branch_count INT DEFAULT 0;
             ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_amount NUMERIC DEFAULT 0;
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS branding_config TEXT;
+            ALTER TABLE shops ADD COLUMN IF NOT EXISTS branding_config TEXT;
 
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_modes_split TEXT;
             ALTER TABLE bills ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
@@ -348,8 +350,8 @@ async function initNeonDatabase() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;
 
-            UPDATE shops SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
-            UPDATE settings SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
+            UPDATE shops SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
+            UPDATE settings SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
         `);
 
         // 2. Indexes

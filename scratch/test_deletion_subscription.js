@@ -25,14 +25,15 @@ async function runTests() {
     // TEST A — CREATE BRANCH & SUBSCRIPTION AUTO-UPDATE
     // -------------------------------------------------------------
     console.log("--- TEST A: CREATE BRANCH & SUBSCRIPTION RECALCULATION ---");
+    const uniqueSuffix = Date.now().toString().slice(-5);
     const orgReq = {
         user: { id: 'usr_admin', role: 'Admin' },
         body: {
-            name: 'Test Subscription Org',
-            code: 'TSO-01',
+            name: 'Test Subscription Org ' + uniqueSuffix,
+            code: 'TSO-' + uniqueSuffix,
             price_per_branch: 999,
-            owner_name: 'TSO Owner',
-            owner_username: 'tso_owner_user',
+            owner_name: 'TSO Owner ' + uniqueSuffix,
+            owner_username: 'tso_owner_' + uniqueSuffix,
             owner_password: 'password123'
         }
     };
@@ -46,19 +47,19 @@ async function runTests() {
     // Create Branch 2 and Branch 3 under Org
     const mockOwnerReq = {
         user: { id: ownerId, role: 'Owner', organization_id: orgId },
-        body: { shop_name: 'TSO Branch 2', shop_code: 'TSO-B02', organization_id: orgId }
+        body: { shop_name: 'TSO Branch 2 ' + uniqueSuffix, shop_code: 'TSO-B02-' + uniqueSuffix, organization_id: orgId }
     };
     const b2Res = resHelper();
     await createShop(mockOwnerReq, b2Res);
 
     const b3Req = {
         user: { id: ownerId, role: 'Owner', organization_id: orgId },
-        body: { shop_name: 'TSO Branch 3', shop_code: 'TSO-B03', organization_id: orgId }
+        body: { shop_name: 'TSO Branch 3 ' + uniqueSuffix, shop_code: 'TSO-B03-' + uniqueSuffix, organization_id: orgId }
     };
     const b3Res = resHelper();
     await createShop(b3Req, b3Res);
 
-    const b3Id = b3Res.responseData?.data?.shop_id;
+    const b3Id = b3Res.responseData?.data?.shop_id || b3Res.responseData?.data?.id;
 
     // Verify Organization subscription details
     const dbOrgA = await db.prepare("SELECT * FROM organizations WHERE id = ?").get(orgId);
@@ -103,9 +104,9 @@ async function runTests() {
     const orgBReq = {
         user: { id: 'usr_admin', role: 'Admin' },
         body: {
-            name: 'Isolated Org B',
-            code: 'ISOB-01',
-            owner_username: 'isob_owner_user',
+            name: 'Isolated Org B ' + uniqueSuffix,
+            code: 'ISOB-' + uniqueSuffix,
+            owner_username: 'isob_owner_' + uniqueSuffix,
             owner_password: 'password123'
         }
     };

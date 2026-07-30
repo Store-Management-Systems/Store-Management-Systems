@@ -6,7 +6,7 @@ function createWindow() {
     width: 1280,
     height: 800,
     title: 'STORE MANAGEMENT SYSTEMS — B2B & B2C Enterprise',
-    icon: path.join(__dirname, '../logo.png'),
+    icon: path.join(__dirname, '../assets/logos/logo.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true

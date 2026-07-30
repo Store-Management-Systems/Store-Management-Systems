@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 CREATE TABLE IF NOT EXISTS platform_settings (
     id TEXT PRIMARY KEY,
     platform_name TEXT DEFAULT 'STORE MANAGEMENT SYSTEMS',
-    platform_logo TEXT DEFAULT 'logo.png',
+    platform_logo TEXT DEFAULT 'assets/logos/logo.png',
     support_email TEXT DEFAULT 'support@storemanagementsystems.com',
     support_phone TEXT DEFAULT '+1-800-SMS-SaaS',
     default_currency TEXT DEFAULT '₹',

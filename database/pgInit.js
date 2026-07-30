@@ -310,8 +310,8 @@ async function initNeonDatabase() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;
 
-            UPDATE shops SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
-            UPDATE settings SET logo = 'logo.png' WHERE logo IS NULL OR logo = '';
+            UPDATE shops SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
+            UPDATE settings SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
         `);
 
         // 2. Indexes

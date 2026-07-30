@@ -100,7 +100,7 @@ async function resetFullDatabase() {
         // 5. Reset Platform Settings
         await db.prepare(`
             INSERT INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
-            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
             ON CONFLICT (id) DO NOTHING
         `).run();
         console.log('  ✓ Provisioned Platform Settings (ps_global)');
