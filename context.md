@@ -104,6 +104,7 @@ Organization Subscription Amount = Active Billable Branches × Configured Branch
 ---
 
 ## Production Infrastructure & Deployment
+- **Live Hosted Web Application URL**: `https://store-management-systems.onrender.com`
 - **Database Engine**: Neon PostgreSQL (AWS us-east-2)
 - **Neon Project Name**: `Store-Management-Systems` (`bold-scene-74981958`)
 - **Neon Active Branch**: `production` (`br-ancient-recipe-ay9jsixp`)
