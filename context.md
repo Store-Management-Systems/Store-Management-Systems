@@ -100,3 +100,16 @@ Organization Subscription Amount = Active Billable Branches × Configured Branch
 1. Always preserve tenant isolation on all server routes (`organization_id`).
 2. Maintain strict separation between Platform Settings, Organization Settings, and Branch Settings.
 3. Verify all changes using automated backend tests and responsive UI checks.
+
+---
+
+## Production Infrastructure & Deployment
+- **Database Engine**: Neon PostgreSQL (AWS us-east-2)
+- **Neon Project Name**: `Store-Management-Systems` (`bold-scene-74981958`)
+- **Neon Active Branch**: `production` (`br-ancient-recipe-ay9jsixp`)
+- **Neon Endpoint**: `ep-old-waterfall-ay86a9u4` (Active, 0.25 ↔ 2 CU)
+- **Database Connection**: `postgresql://neondb_owner:***@ep-old-waterfall-ay86a9u4-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+- **Render Outbound IP CIDR Ranges (For IP Whitelisting / Firewall Configuration)**:
+  - `74.220.48.0/24`
+  - `74.220.56.0/24`
+

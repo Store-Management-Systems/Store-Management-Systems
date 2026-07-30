@@ -8,11 +8,15 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
+let initPromise = null;
+
 async function initNeonDatabase() {
-    console.log('🚀 Initializing Neon PostgreSQL Database Schemas...');
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
+    if (initPromise) return initPromise;
+    initPromise = (async () => {
+        console.log('🚀 Initializing Neon PostgreSQL Database Schemas...');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
         // 1. DDL Statements
         await client.query(`
@@ -421,12 +425,15 @@ async function initNeonDatabase() {
         await client.query('COMMIT');
         console.log('✨ Neon PostgreSQL Database Ready and Fully Provisioned with B2B/B2C Schemas!');
     } catch (err) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => {});
         console.error('❌ Failed to initialize Neon DB:', err);
+        initPromise = null;
         throw err;
     } finally {
         client.release();
     }
+    })();
+    return initPromise;
 }
 
 module.exports = { pool, initNeonDatabase };

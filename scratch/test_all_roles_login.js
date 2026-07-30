@@ -1,10 +1,15 @@
 const { db } = require('../src/shared');
+const { initNeonDatabase } = require('../src/shared/database/pgInit');
 const bcrypt = require('bcryptjs');
 const { login } = require('../src/modules/auth/controllers/authController');
 const { createOrganization } = require('../src/modules/organization/controllers/organizationController');
 const { createShop, deleteShop } = require('../src/modules/shops/controllers/shopController');
 
 async function runRoleLoginTests() {
+    if (process.env.DATABASE_URL) {
+        await initNeonDatabase().catch(() => {});
+    }
+
     console.log("==================================================");
     console.log("🧪 EXECUTING COMPREHENSIVE ROLE & AUTHENTICATION TEST SUITE");
     console.log("==================================================\n");
