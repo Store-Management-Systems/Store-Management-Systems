@@ -1,88 +1,28 @@
-# Module: Approval Management (`approvals`)
+# Module Context: Approvals & Audit (`approvals`)
+
+## Module Name
+Pending Approvals & Superadmin Audit Logs (`approvals`)
 
 ## Purpose
-The Approval Management module governs multi-tier approval workflows for sensitive branch operations (branch creation, staff user creation, user edits, user deletion) requiring Super Admin consent, with an 8-hour auto-approval fallback.
+Provides an approval request pipeline where sensitive store requests submitted by branch personnel appear for Superadmin review, with automatic 8-hour approval rules.
 
-## Current Functionality
-* Approval Request Listing: Super Admin views all pending/processed requests; non-Admin views own submitted requests.
-* Auto-Approval Engine: Checks pending requests upon access and auto-approves requests older than 8 hours (`processPendingAutoApprovals`).
-* Manual Approval: Super Admin approves pending requests (`approveRequest`), executing payload actions (`branch_create`, `user_create`, `user_edit`, `user_delete`).
-* Rejection: Super Admin rejects pending requests (`rejectRequest`), marking entity status as `rejected` or `disabled`.
+## Responsibilities
+- Record request submissions (`action_type`, `requested_by`, `shop_id`).
+- Display pending, approved, and rejected request lists to Platform Admin.
+- Execute auto-approval policy: Requests automatically approve after 8 hours if no manual action is taken.
+- Provide Topbar Header badge alert (`🛡 Approvals`) indicating pending request count for Platform Admin.
 
-## User Roles
-* **Admin**: Super Admin views all requests, approves/rejects requests.
-* **Owner/Manager**: Submits requests, views own submitted request status.
+## Routes & API Endpoints
+- `GET /api/approvals`: List approval requests.
+- `POST /api/approvals/:id/approve`: Approve request.
+- `POST /api/approvals/:id/reject`: Decline request.
 
-## Permissions
-* Requires authenticated session (`authenticate` middleware).
-* Approval/Rejection endpoints (`/approve`, `/reject`) strictly restricted to Super Admin (`role === 'Admin'`).
+## Components & Files Included
+- Controller: [src/modules/approvals/controllers/approvalController.js](file:///d:/fun/src/modules/approvals/controllers/approvalController.js)
+- Frontend View: `script.js` (`openApprovalsModal` and `renderAdminApprovalsSection`)
 
-## File Structure
-```
-src/modules/approvals/
-├── controllers/
-│   └── approvalController.js
-├── routes/
-│   └── approvalRoutes.js
-├── services/
-│   └── approvalService.js
-├── context.md
-└── index.js
-```
+## Recent Changes & Changelog
 
-## Routes
-* `GET /api/approvals`: List approval queue entries.
-* `POST /api/approvals/:id/approve`: Manually approve request.
-* `POST /api/approvals/:id/reject`: Reject request.
-
-## Components
-* Interfaces with Approval Queue table in Super Admin SPA dashboard.
-
-## Services / Business Logic
-* `processPendingAutoApprovals` evaluates `auto_approve_at` timestamp (set to current time + 8 hours on creation).
-* Payload execution handles target entity state mutation (`shops` and `users` table updates).
-
-## API / Server Actions
-* Standard JSON response formatting via `src/shared/utils/response.js`.
-
-## Database Dependencies
-* `approvals`: Approval request records, type, title, status (`pending`, `approved`, `rejected`), JSON payload, timestamps.
-* `shops`: Target branch status updates (`active`, `rejected`).
-* `users`: Target staff status updates (`active`, `disabled`).
-
-## Shared Dependencies
-* `src/shared/middleware/auth.js` (`authenticate`)
-* `src/shared/database/init.js` (`db`)
-
-## Module Dependencies
-* `shops`: Triggered during non-Superadmin branch creation.
-* `users`: Triggered during non-Superadmin user creation, editing, or deletion.
-* `notifications`: Logs audit trail via `logAudit`.
-
-## Data Flow
-```
-GET /api/approvals
-  ↓
-Trigger `processPendingAutoApprovals()` -> Execute payloads for expired requests (now >= auto_approve_at)
-  ↓
-Query `approvals` table -> Return list to Super Admin
-```
-
-## Important Business Rules
-* Only pending requests (`status === 'pending'`) can be approved or rejected.
-* Auto-approval duration is 8 hours from creation time.
-
-## Validation Rules
-* Requires valid approval request ID.
-
-## Current UI Behaviour
-* Displayed under Super Admin Approvals tab.
-
-## Known Limitations
-* 8-hour auto-approval timer runs lazily on API invocation.
-
-## Change History
-* Modularized into `src/modules/approvals`.
-
-## Future Development Instructions
-* When adding a new approval request type, implement payload execution handling in `approvalService.js`.
+### Version 2.5.0 (2026-07-31)
+- **Superadmin Topbar Badge**: Displayed `🛡 Approvals (Count)` badge on top bar header for Platform Admin.
+- **Dedicated Full Section**: Added `renderAdminApprovalsSection` for canvas view.

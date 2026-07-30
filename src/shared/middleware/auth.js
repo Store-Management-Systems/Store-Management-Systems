@@ -23,17 +23,31 @@ const authenticate = async (req, res, next) => {
 
         // DB Status Verification: Prevent disabled users or deleted organization accounts from making requests
         if (req.user.role !== 'Admin') {
-            const dbUser = await db.prepare("SELECT id, status, organization_id, shop_id FROM users WHERE id = ?").get(req.user.id);
+            const dbUser = await db.prepare("SELECT id, role, status, organization_id, shop_id FROM users WHERE id = ?").get(req.user.id);
             if (!dbUser || dbUser.status === 'disabled' || dbUser.status === 'deleted') {
                 return error(res, 'Access revoked: Your user account has been disabled or deleted.', 403);
             }
 
-            const orgId = dbUser.organization_id || req.user.organization_id;
+            if (dbUser.role) {
+                req.user.role = dbUser.role;
+            }
+
+            let orgId = dbUser.organization_id || req.user.organization_id;
+            if (!orgId && req.user.role === 'Owner') {
+                const orgRec = await db.prepare("SELECT id FROM organizations WHERE owner_id = ?").get(req.user.id);
+                if (orgRec) {
+                    orgId = orgRec.id;
+                    req.user.organization_id = orgId;
+                    await db.prepare("UPDATE users SET organization_id = ? WHERE id = ?").run(orgId, req.user.id).catch(() => {});
+                }
+            }
+
             if (orgId) {
                 const dbOrg = await db.prepare("SELECT status FROM organizations WHERE id = ?").get(orgId);
                 if (!dbOrg || dbOrg.status === 'deleted' || dbOrg.status === 'inactive') {
                     return error(res, 'Access revoked: Your Organization has been deactivated or deleted. Contact Admin.', 403);
                 }
+                req.user.organization_id = orgId;
             }
         }
 

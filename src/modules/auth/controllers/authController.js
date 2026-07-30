@@ -63,19 +63,23 @@ const login = async (req, res) => {
             permissions = [];
         }
 
-        let ownedShops = [];
-        if (user.role === 'Admin') {
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
-        } else {
-            const orgId = user.organization_id || '';
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id);
-        }
-
         let orgDetails = null;
         if (user.organization_id) {
             orgDetails = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
         } else if (user.role === 'Owner') {
             orgDetails = await db.prepare('SELECT * FROM organizations WHERE owner_id = ?').get(user.id);
+            if (orgDetails && orgDetails.id) {
+                user.organization_id = orgDetails.id;
+                await db.prepare("UPDATE users SET organization_id = ? WHERE id = ?").run(orgDetails.id, user.id).catch(() => {});
+            }
+        }
+
+        let ownedShops = [];
+        if (user.role === 'Admin') {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
+        } else {
+            const orgId = user.organization_id || (orgDetails ? orgDetails.id : '');
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id || '');
         }
 
         if (user.role !== 'Admin' && orgDetails && (orgDetails.status === 'deleted' || orgDetails.status === 'inactive')) {
@@ -119,7 +123,7 @@ const login = async (req, res) => {
                 organization_id: payload.organization_id,
                 organization: orgDetails || null,
                 permissions,
-                branches: ownedShops,
+                branches: ownedShops || [],
                 shop: shop ? {
                     id: shop.id,
                     name: shop.shop_name || shop.name,
@@ -147,19 +151,24 @@ const getMe = async (req, res) => {
         }
 
         const shop = await db.prepare('SELECT * FROM shops WHERE id = ?').get(user.shop_id);
-        let ownedShops = [];
-        if (user.role === 'Admin') {
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
-        } else {
-            const orgId = user.organization_id || '';
-            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id);
-        }
 
         let orgDetails = null;
         if (user.organization_id) {
             orgDetails = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
         } else if (user.role === 'Owner') {
             orgDetails = await db.prepare('SELECT * FROM organizations WHERE owner_id = ?').get(user.id);
+            if (orgDetails && orgDetails.id) {
+                user.organization_id = orgDetails.id;
+                await db.prepare("UPDATE users SET organization_id = ? WHERE id = ?").run(orgDetails.id, user.id).catch(() => {});
+            }
+        }
+
+        let ownedShops = [];
+        if (user.role === 'Admin') {
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE status != 'deleted' ORDER BY created_at DESC").all();
+        } else {
+            const orgId = user.organization_id || (orgDetails ? orgDetails.id : '');
+            ownedShops = await db.prepare("SELECT id, name, shop_name, shop_code, logo, status, address, phone FROM shops WHERE (organization_id = ? OR owner_id = ? OR id = ?) AND status != 'deleted' ORDER BY created_at DESC").all(orgId, user.id, user.shop_id || '');
         }
 
         let permissions = [];
@@ -174,7 +183,7 @@ const getMe = async (req, res) => {
             organization_id: user.organization_id || (orgDetails ? orgDetails.id : null),
             organization: orgDetails || null,
             permissions,
-            branches: ownedShops,
+            branches: ownedShops || [],
             shop: shop ? {
                 id: shop.id,
                 name: shop.shop_name || shop.name,

@@ -180,7 +180,7 @@ async function checkAuth() {
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
       try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
-      if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
+      if (currentUser && currentUser.branches && Array.isArray(currentUser.branches) && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
         try { openMultiBranchLoginModal(); } catch (err) {}
       }
     }
@@ -259,7 +259,7 @@ async function handleLoginSubmit(e) {
         alert('Welcome back!');
       }
 
-      if (currentUser.branches && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
+      if (currentUser && currentUser.branches && Array.isArray(currentUser.branches) && currentUser.branches.length > 1 && !sessionStorage.getItem('sms_branch_selected')) {
         try { openMultiBranchLoginModal(); } catch (err) {}
       }
     } else {
@@ -270,6 +270,7 @@ async function handleLoginSubmit(e) {
       alert(res.message || 'Invalid username or password');
     }
   } catch (err) {
+    console.error('Login error:', err);
     if (loginCard) {
       loginCard.classList.add('shake-error');
       setTimeout(() => loginCard.classList.remove('shake-error'), 400);
@@ -278,7 +279,7 @@ async function handleLoginSubmit(e) {
   } finally {
     if (loginBtn) {
       loginBtn.disabled = false;
-      loginBtn.textContent = '🔐 Sign In';
+      loginBtn.textContent = '🔒 Sign In to System';
     }
   }
 }
@@ -340,17 +341,19 @@ async function loadAdminShops() {
 }
 
 function loadMultiBranchDropdown() {
-  if (!currentUser || !currentUser.branches) return;
+  if (!currentUser || !currentUser.branches || !Array.isArray(currentUser.branches)) return;
   state.shops = currentUser.branches;
   const select = document.getElementById('adminShopDropdown');
+  if (!select) return;
   select.innerHTML = currentUser.branches.map(s => `
     <option value="${s.id}" ${s.id === activeShopId ? 'selected' : ''}>🏢 ${s.shop_name || s.name}</option>
   `).join('');
-  document.getElementById('topbarAdminShopSelect').style.display = 'block';
+  const topbarAdminShopSelect = document.getElementById('topbarAdminShopSelect');
+  if (topbarAdminShopSelect) topbarAdminShopSelect.style.display = 'block';
 }
 
 function openMultiBranchLoginModal() {
-  if (!currentUser || !currentUser.branches || currentUser.branches.length <= 1) return;
+  if (!currentUser || !currentUser.branches || !Array.isArray(currentUser.branches) || currentUser.branches.length <= 1) return;
   sessionStorage.setItem('sms_branch_selected', 'true');
 
   const branchesHtml = `
@@ -430,48 +433,133 @@ function updateRoleUI() {
   const role = currentUser.role;
 
   const adminShopSelect = document.getElementById('topbarAdminShopSelect');
+  const btnTopReports = document.getElementById('btnTopReports');
+  const btnTopApprovals = document.getElementById('btnTopApprovals');
+
   const sideOrgs = document.getElementById('side-organizations');
+  const sideBranches = document.getElementById('side-branches');
+  const sideSubs = document.getElementById('side-subscriptions');
+  const sideApprovals = document.getElementById('side-approvals');
+  const sideAbout = document.getElementById('side-about');
+
   const sidePeople = document.getElementById('side-people');
   const sideStock = document.getElementById('side-stock');
   const sideBill = document.getElementById('side-bill');
   const sideAnalytics = document.getElementById('side-analytics');
+  const sideHistory = document.getElementById('side-history');
+  const sideSettings = document.getElementById('side-settings');
+
+  const bottomNav = document.getElementById('bottomNav');
 
   if (role === 'Admin') {
-    // 1. Hide topbar shop switcher for Admin (Superadmin manages Organizations, not individual branch switching)
+    // 1. Topbar Header Controls for Platform Admin
     if (adminShopSelect) adminShopSelect.style.display = 'none';
+    if (btnTopReports) btnTopReports.style.display = 'none';
+    if (btnTopApprovals) btnTopApprovals.style.display = 'inline-flex';
 
-    // 2. Show Admin-specific sidebar items & hide operational items (POS Billing, Stock, Parties)
+    // 2. Sidebar Navigation for Platform Admin (ONLY SaaS Management)
     if (sideOrgs) sideOrgs.style.display = 'flex';
+    if (sideBranches) sideBranches.style.display = 'flex';
+    if (sideSubs) sideSubs.style.display = 'flex';
+    if (sideApprovals) sideApprovals.style.display = 'flex';
+    if (sideSettings) sideSettings.style.display = 'flex';
+    if (sideAbout) sideAbout.style.display = 'flex';
+
+    // Permanently hide operational modules from Platform Admin sidebar
     if (sidePeople) sidePeople.style.display = 'none';
     if (sideStock) sideStock.style.display = 'none';
     if (sideBill) sideBill.style.display = 'none';
     if (sideAnalytics) sideAnalytics.style.display = 'none';
-  } else if (role === 'Owner') {
-    // Owner sees branch selector if multiple branches exist for their organization
-    if (currentUser.branches && currentUser.branches.length > 1) {
-      loadMultiBranchDropdown();
-    } else if (adminShopSelect) {
-      adminShopSelect.style.display = 'none';
+    if (sideHistory) sideHistory.style.display = 'none';
+
+    // 3. Mobile Bottom Navigation for Platform Admin (ONLY SaaS Management)
+    if (bottomNav) {
+      bottomNav.innerHTML = `
+        <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
+          <span class="nav-icon">📊</span>Dashboard
+        </button>
+        <button class="nav-btn ${currentSection === 'organizations' ? 'active' : ''}" id="nav-organizations" onclick="showSection('organizations')">
+          <span class="nav-icon">🏢</span>Orgs
+        </button>
+        <button class="nav-btn ${currentSection === 'branches' ? 'active' : ''}" id="nav-branches" onclick="showSection('branches')">
+          <span class="nav-icon">📍</span>Branches
+        </button>
+        <button class="nav-btn ${currentSection === 'subscriptions' ? 'active' : ''}" id="nav-subscriptions" onclick="showSection('subscriptions')">
+          <span class="nav-icon">💳</span>Subs
+        </button>
+        <button class="nav-btn ${currentSection === 'approvals' ? 'active' : ''}" id="nav-approvals" onclick="showSection('approvals')">
+          <span class="nav-icon">🛡️</span>Approvals
+        </button>
+        <button class="nav-btn ${currentSection === 'settings' ? 'active' : ''}" id="nav-settings" onclick="showSection('settings')">
+          <span class="nav-icon">⚙️</span>Settings
+        </button>
+      `;
     }
 
-    if (sideOrgs) sideOrgs.style.display = 'none';
-    if (sidePeople) sidePeople.style.display = 'flex';
-    if (sideStock) sideStock.style.display = 'flex';
-    if (sideBill) sideBill.style.display = 'flex';
-    if (sideAnalytics) sideAnalytics.style.display = 'flex';
   } else {
-    // Manager / Staff
-    if (adminShopSelect) adminShopSelect.style.display = 'none';
+    // Operational Roles (Owner, Manager, Staff)
+    if (btnTopReports) btnTopReports.style.display = 'inline-flex';
+    if (btnTopApprovals) btnTopApprovals.style.display = 'none';
+
+    if (role === 'Owner') {
+      if (currentUser && currentUser.branches && Array.isArray(currentUser.branches) && currentUser.branches.length > 1) {
+        loadMultiBranchDropdown();
+      } else if (adminShopSelect) {
+        adminShopSelect.style.display = 'none';
+      }
+    } else {
+      if (adminShopSelect) adminShopSelect.style.display = 'none';
+    }
+
+    // Hide Admin-specific SaaS modules from operational users
     if (sideOrgs) sideOrgs.style.display = 'none';
+    if (sideBranches) sideBranches.style.display = 'none';
+    if (sideSubs) sideSubs.style.display = 'none';
+    if (sideApprovals) sideApprovals.style.display = 'none';
+    if (sideAbout) sideAbout.style.display = 'none';
+
+    // Show operational modules for Store Personnel
     if (sidePeople) sidePeople.style.display = 'flex';
     if (sideStock) sideStock.style.display = 'flex';
     if (sideBill) sideBill.style.display = 'flex';
     if (sideAnalytics) sideAnalytics.style.display = 'flex';
+    if (sideHistory) sideHistory.style.display = 'flex';
+    if (sideSettings) sideSettings.style.display = 'flex';
+
+    // Mobile Bottom Navigation for Store Personnel
+    if (bottomNav) {
+      bottomNav.innerHTML = `
+        <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
+          <span class="nav-icon">📊</span>Dashboard
+        </button>
+        <button class="nav-btn ${currentSection === 'people' ? 'active' : ''}" id="nav-people" onclick="showSection('people')">
+          <span class="nav-icon">👥</span>People
+        </button>
+        <button class="nav-btn ${currentSection === 'stock' ? 'active' : ''}" id="nav-stock" onclick="showSection('stock')">
+          <span class="nav-icon">📦</span>Stock
+        </button>
+        <button class="nav-btn ${currentSection === 'bill' ? 'active' : ''}" id="nav-bill" onclick="showSection('bill')">
+          <span class="nav-icon">🧾</span>Bill
+        </button>
+        <button class="nav-btn ${currentSection === 'analytics' ? 'active' : ''}" id="nav-analytics" onclick="showSection('analytics')">
+          <span class="nav-icon">📈</span>Analytics
+        </button>
+        <button class="nav-btn ${currentSection === 'history' ? 'active' : ''}" id="nav-history" onclick="showSection('history')">
+          <span class="nav-icon">📋</span>History
+        </button>
+      `;
+    }
   }
 }
 
 // ─── Load Initial Backend Data ────────────────────────────────────────────────
 async function loadInitialData() {
+  if (currentUser && currentUser.role === 'Admin') {
+    // Platform Admin manages SaaS tenants; skip fetching store inventory/billing data
+    updateTopbar();
+    return;
+  }
+
   try {
     const [itemsRes, catsRes, unitsRes, settingsRes, peopleRes] = await Promise.all([
       apiFetch('/items'),
@@ -481,11 +569,11 @@ async function loadInitialData() {
       apiFetch('/people')
     ]);
 
-    if (itemsRes.success) state.items = itemsRes.data || [];
-    if (catsRes.success) state.categories = (catsRes.data || []).map(c => c.name || c);
-    if (unitsRes.success) state.units = (unitsRes.data || []).map(u => u.name || u);
-    if (peopleRes.success) state.people = peopleRes.data || [];
-    if (settingsRes.success && settingsRes.data) {
+    if (itemsRes && itemsRes.success) state.items = itemsRes.data || [];
+    if (catsRes && catsRes.success) state.categories = (catsRes.data || []).map(c => c.name || c);
+    if (unitsRes && unitsRes.success) state.units = (unitsRes.data || []).map(u => u.name || u);
+    if (peopleRes && peopleRes.success) state.people = peopleRes.data || [];
+    if (settingsRes && settingsRes.success && settingsRes.data) {
       state.shop = { ...state.shop, ...settingsRes.data };
       if (!state.shop.logo || state.shop.logo === 'logo.png') state.shop.logo = 'assets/logos/logo.png';
     }
@@ -504,6 +592,13 @@ async function loadInitialData() {
 let currentSection = 'dashboard';
 
 function showSection(name) {
+  // Operational Route Guard for Platform Admin
+  const operationalSections = ['people', 'stock', 'bill', 'analytics', 'history', 'customers'];
+  if (currentUser && currentUser.role === 'Admin' && operationalSections.includes(name)) {
+    showToast('Access Restricted', 'Operational store modules are reserved for Store Personnel & Owners.', 'warning');
+    name = 'dashboard';
+  }
+
   currentSection = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
@@ -518,6 +613,10 @@ function showSection(name) {
   if (secTitleEl) {
     const titles = {
       dashboard: 'Dashboard',
+      organizations: 'Organizations Directory',
+      branches: 'Branch Directory',
+      subscriptions: 'Subscription Management',
+      approvals: 'Pending Approvals',
       people: 'Parties & Customers',
       stock: 'Inventory Stock',
       bill: 'POS Billing',
@@ -537,10 +636,15 @@ function showSection(name) {
 
 function renderSection(name) {
   const c = document.getElementById('mainContent');
+  if (!c) return;
   c.innerHTML = '';
 
   switch (name) {
     case 'dashboard': renderDashboard(c); break;
+    case 'organizations': renderAdminOrganizationsSection(c); break;
+    case 'branches': renderAdminBranchesSection(c); break;
+    case 'subscriptions': renderAdminSubscriptionsSection(c); break;
+    case 'approvals': renderAdminApprovalsSection(c); break;
     case 'people': renderPeopleSection(c); break;
     case 'stock': renderStock(c); break;
     case 'bill': renderBill(c); break;
@@ -548,6 +652,7 @@ function renderSection(name) {
     case 'history': renderHistory(c); break;
     case 'settings': renderSettings(c); break;
     case 'customers': renderPeopleSection(c, 'Customer'); break;
+    default: renderDashboard(c); break;
   }
   updateTopbar();
 }
@@ -749,11 +854,13 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="ownerBranchFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), document.getElementById('ownerDateRangeFilter').value, this.value)">
-              <option value="all" ${(!overrideBranch || overrideBranch === 'all') ? 'selected' : ''}>🌐 All Branches (${perf.length})</option>
-              ${perf.map(b => `<option value="${b.branch_id}" ${overrideBranch === b.branch_id ? 'selected' : ''}>📍 ${b.branch_name} (${b.branch_code})</option>`).join('')}
-            </select>
-            <select id="ownerDateRangeFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), this.value, document.getElementById('ownerBranchFilter').value)">
+            ${perf.length > 0 ? `
+              <select id="ownerBranchFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), document.getElementById('ownerDateRangeFilter').value, this.value)">
+                <option value="all" ${(!overrideBranch || overrideBranch === 'all') ? 'selected' : ''}>🌐 All Branches (${perf.length})</option>
+                ${perf.map(b => `<option value="${b.branch_id}" ${overrideBranch === b.branch_id ? 'selected' : ''}>📍 ${b.branch_name} (${b.branch_code})</option>`).join('')}
+              </select>
+            ` : ''}
+            <select id="ownerDateRangeFilter" class="form-control" style="width:auto;padding:8px 12px;" onchange="renderDashboard(document.getElementById('mainContent'), this.value, document.getElementById('ownerBranchFilter') ? document.getElementById('ownerBranchFilter').value : 'all')">
               <option value="all" ${(!overrideRange || overrideRange === 'all') ? 'selected' : ''}>📅 All Time</option>
               <option value="today" ${overrideRange === 'today' ? 'selected' : ''}>Today</option>
               <option value="yesterday" ${overrideRange === 'yesterday' ? 'selected' : ''}>Yesterday</option>
@@ -789,26 +896,33 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
             <button class="btn-sm btn-secondary" onclick="openCreateBranchModal()">➕ Add Branch</button>
           </div>
           <div style="overflow-x:auto;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Branch Name</th>
-                  <th>Branch Code</th>
-                  <th>Total Sales</th>
-                  <th>Total Invoices</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${perf.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No branches created yet</td></tr>' :
-                  perf.map(b => `
+            ${perf.length === 0 ? `
+              <div style="text-align:center;padding:40px 20px;background:var(--bg-surface);border-radius:12px;border:1px dashed var(--border-light);margin:16px 0;">
+                <div style="font-size:36px;margin-bottom:10px;">🏪</div>
+                <div style="font-size:16px;font-weight:700;color:var(--text-primary);">No branches created yet</div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:4px;margin-bottom:16px;">Create your first branch location to start billing and managing inventory.</div>
+                <button class="btn-primary" onclick="openCreateBranchModal()">➕ Create Branch</button>
+              </div>
+            ` : `
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Branch Name</th>
+                    <th>Branch Code</th>
+                    <th>Total Sales</th>
+                    <th>Total Invoices</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${perf.map(b => `
                     <tr>
                       <td style="font-weight:700;font-size:15px;color:var(--text-primary);">${b.branch_name}</td>
                       <td><code>${b.branch_code}</code></td>
                       <td style="font-weight:800;color:var(--ios-green);font-size:16px;">${state.shop.currency}${fmtNum(b.sales, 2)}</td>
                       <td style="font-weight:700;">${b.bill_count} Bills</td>
-                      <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status.toUpperCase()}</span></td>
+                      <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status ? b.status.toUpperCase() : 'ACTIVE'}</span></td>
                       <td>
                         <div style="display:flex;gap:4px;">
                           <button class="btn-sm btn-primary" onclick="handleSwitchBranch('${b.branch_id}')">🔄 Switch Branch</button>
@@ -816,10 +930,10 @@ async function renderDashboard(c, overrideRange = null, overrideBranch = null) {
                         </div>
                       </td>
                     </tr>
-                  `).join('')
-                }
-              </tbody>
-            </table>
+                  `).join('')}
+                </tbody>
+              </table>
+            `}
           </div>
         </div>
       </div>`;
@@ -3533,7 +3647,273 @@ async function openOrganizationsModal() {
 
     showModal('🏢 Organizations Directory', orgsHtml);
   } catch (err) {
-    alert(err.message || 'Failed to fetch organizations');
+// ─── Platform Admin Dedicated Section View Renderers ────────────────────────
+async function renderAdminOrganizationsSection(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Organizations Directory...</div>`;
+  try {
+    const res = await apiFetch('/organizations');
+    if (!res.success) throw new Error(res.message || 'Failed to load organizations');
+    const orgs = res.data || [];
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🏢 Organizations Directory</h2>
+          <div style="font-size:13px;color:var(--text-muted);">Manage all tenant organizations, active subscriptions, and owner assignments</div>
+        </div>
+        <button class="btn-primary" onclick="openCreateOrganizationModal()">➕ Create New Organization</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <h3>All Registered Organizations (${orgs.length})</h3>
+          <input type="text" class="form-control" style="width:240px;padding:6px 12px;font-size:13px;" placeholder="Search organization..." onkeyup="filterTable(this.value, 'adminOrgsTable')">
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="adminOrgsTable">
+            <thead>
+              <tr>
+                <th>Organization Name</th>
+                <th>Code</th>
+                <th>Owner Details</th>
+                <th>Active Branches</th>
+                <th>Monthly Subscription</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orgs.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">No organizations registered yet</td></tr>' :
+                orgs.map(o => {
+                  const activeCount = o.active_branches_count !== undefined ? o.active_branches_count : (o.branches_count || 0);
+                  const pricePerBranch = o.price_per_branch || 999;
+                  const subAmount = activeCount * pricePerBranch;
+                  return `
+                  <tr>
+                    <td style="font-weight:700;font-size:15px;color:var(--text-primary);">${o.name}</td>
+                    <td><code>${o.code}</code></td>
+                    <td>
+                      <div style="font-weight:600;">${o.owner ? o.owner.name : (o.owner_name || 'Unassigned')}</div>
+                      <div style="font-size:11px;color:var(--text-muted);">${o.owner && o.owner.username ? '@' + o.owner.username : (o.email || '')}</div>
+                    </td>
+                    <td style="font-weight:700;color:var(--ios-blue);">${activeCount} Active Location${activeCount !== 1 ? 'es' : ''}</td>
+                    <td style="font-weight:800;color:var(--ios-green);">${state.shop.currency}${fmtNum(subAmount, 0)}</td>
+                    <td>
+                      <span class="badge ${o.status === 'inactive' ? 'badge-warning' : 'badge-success'}">${o.status.toUpperCase()}</span>
+                    </td>
+                    <td>
+                      <div style="display:flex;gap:4px;">
+                        <button class="btn-sm btn-secondary" onclick="openOrganizationDetailsModal('${o.id}')">🔍 View</button>
+                        <button class="btn-sm btn-secondary" onclick="openEditOrganizationModal('${o.id}')">✏ Edit</button>
+                        ${o.status === 'active' 
+                          ? `<button class="btn-sm btn-warning" onclick="toggleOrganizationStatus('${o.id}', 'inactive')">⏸ Deactivate</button>` 
+                          : `<button class="btn-sm btn-success" onclick="toggleOrganizationStatus('${o.id}', 'active')">▶ Activate</button>`
+                        }
+                        <button class="btn-sm btn-danger" onclick="confirmDeleteOrganizationModal('${o.id}', '${o.name}')">🗑 Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                  `;
+                }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load organization directory: ${err.message}</div>`;
+  }
+}
+
+async function renderAdminBranchesSection(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Branch Locations...</div>`;
+  try {
+    const res = await apiFetch('/dashboard');
+    const stats = res.data || {};
+    const branches = stats.branches || [];
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">📍 Store Branch Directory</h2>
+          <div style="font-size:13px;color:var(--text-muted);">Platform-wide billable store locations & branches across all organizations</div>
+        </div>
+        <button class="btn-primary" onclick="openCreateBranchModal()">➕ Create Branch</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <h3>All Platform Branches (${branches.length})</h3>
+          <input type="text" class="form-control" style="width:240px;padding:6px 12px;font-size:13px;" placeholder="Search branch..." onkeyup="filterTable(this.value, 'adminBranchesTable')">
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="adminBranchesTable">
+            <thead>
+              <tr>
+                <th>Branch Name</th>
+                <th>Branch Code</th>
+                <th>Organization</th>
+                <th>Owner</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${branches.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">No branches registered yet</td></tr>' :
+                branches.map(b => `
+                  <tr>
+                    <td style="font-weight:700;font-size:15px;color:var(--text-primary);">${b.name}</td>
+                    <td><code>${b.code}</code></td>
+                    <td style="font-weight:600;color:var(--ios-blue);">${b.organization_name || 'Organization'}</td>
+                    <td>${b.owner_name || 'Owner'}</td>
+                    <td><span class="badge ${b.status === 'active' ? 'badge-success' : 'badge-warning'}">${b.status ? b.status.toUpperCase() : 'ACTIVE'}</span></td>
+                    <td>
+                      <div style="display:flex;gap:4px;">
+                        <button class="btn-sm btn-secondary" onclick="openBranchDetailsModal('${b.id}')">🔍 Details</button>
+                        <button class="btn-sm btn-danger" onclick="confirmDeleteBranchModal('${b.id}', '${b.name}')">🗑 Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load branch directory: ${err.message}</div>`;
+  }
+}
+
+async function renderAdminSubscriptionsSection(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Subscriptions...</div>`;
+  try {
+    const res = await apiFetch('/dashboard');
+    const stats = res.data || {};
+    const orgs = stats.organizations || [];
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">💳 Subscription & SaaS Billing Management</h2>
+          <div style="font-size:13px;color:var(--text-muted);">SaaS plans, branch billability pricing, and tenant renewal tracking</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <h3>Tenant Subscription Directory (${orgs.length})</h3>
+          <input type="text" class="form-control" style="width:240px;padding:6px 12px;font-size:13px;" placeholder="Search subscription..." onkeyup="filterTable(this.value, 'adminSubsTable')">
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="adminSubsTable">
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th>Plan Name</th>
+                <th>Active Branches</th>
+                <th>Price / Branch</th>
+                <th>Current Bill Amount</th>
+                <th>Subscription Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orgs.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">No subscriptions found</td></tr>' :
+                orgs.map(o => {
+                  const activeCount = o.active_branches_count !== undefined ? o.active_branches_count : o.branches_count;
+                  const pricePerBranch = o.price_per_branch || 999;
+                  const subAmount = activeCount * pricePerBranch;
+                  return `
+                  <tr>
+                    <td style="font-weight:700;">${o.name} (<code>${o.code}</code>)</td>
+                    <td><span class="badge badge-info">${o.subscription_plan || 'Standard'}</span></td>
+                    <td style="font-weight:700;color:var(--ios-blue);">${activeCount} Billable Branch${activeCount !== 1 ? 'es' : ''}</td>
+                    <td style="font-weight:600;">${state.shop.currency}${fmtNum(pricePerBranch, 0)}</td>
+                    <td style="font-weight:800;color:var(--ios-green);font-size:15px;">${state.shop.currency}${fmtNum(subAmount, 0)}</td>
+                    <td>
+                      <span class="badge ${o.status === 'inactive' ? 'badge-warning' : (o.subscription_status === 'Expired' ? 'badge-danger' : (o.subscription_status === 'Expiring Soon' ? 'badge-warning' : 'badge-success'))}">${o.status === 'inactive' ? 'Inactive' : (o.subscription_status || 'Active')}</span>
+                    </td>
+                    <td>
+                      <button class="btn-sm btn-primary" onclick="openOrganizationDetailsModal('${o.id}')">💳 View Billing Breakdown</button>
+                    </td>
+                  </tr>
+                  `;
+                }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load subscriptions: ${err.message}</div>`;
+  }
+}
+
+async function renderAdminApprovalsSection(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Approvals...</div>`;
+  try {
+    const res = await apiFetch('/approvals');
+    const apps = res.data || [];
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:22px;font-weight:800;color:var(--text-primary);">🛡 Pending Approvals & Store Requests</h2>
+          <div style="font-size:13px;color:var(--text-muted);">Review critical request submissions from branch owners and managers</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Approval Audit Log (${apps.length})</h3>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Request Type</th>
+                <th>Requested By</th>
+                <th>Branch ID</th>
+                <th>Status</th>
+                <th>Auto-Approve Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${apps.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">No pending or past approval requests</td></tr>' :
+                apps.map(a => `
+                  <tr>
+                    <td style="font-weight:700;">${a.action_type || a.type || 'System Request'}</td>
+                    <td>${a.requested_by || a.username || 'User'}</td>
+                    <td><code>${a.shop_id || 'N/A'}</code></td>
+                    <td><span class="badge ${a.status === 'approved' ? 'badge-success' : a.status === 'rejected' ? 'badge-danger' : 'badge-warning'}">${a.status.toUpperCase()}</span></td>
+                    <td style="font-size:12px;color:var(--text-muted);">${a.auto_approve_at ? formatDate(a.auto_approve_at) : 'N/A'}</td>
+                    <td>
+                      ${a.status === 'pending' ? `
+                        <div style="display:flex;gap:4px;">
+                          <button class="btn-sm btn-primary" onclick="handleApproveRequest('${a.id}')">✅ Approve</button>
+                          <button class="btn-sm btn-danger" onclick="handleRejectRequest('${a.id}')">❌ Reject</button>
+                        </div>
+                      ` : '<span style="font-size:12px;color:var(--text-muted);">Completed</span>'}
+                    </td>
+                  </tr>
+                `).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load approvals: ${err.message}</div>`;
   }
 }
 
@@ -5026,16 +5406,55 @@ function filterSidebarMenu(query) {
   });
 }
 
+function filterTable(query, tableId) {
+  const q = query.toLowerCase().trim();
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function openAboutModal() {
+  showModal('ℹ️ About STORE MANAGEMENT SYSTEMS', `
+    <div style="text-align:center;padding:16px 10px;">
+      <img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS Logo" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px;border-radius:16px;">
+      <h3 style="font-weight:800;font-size:18px;color:var(--text-primary);">STORE MANAGEMENT SYSTEMS</h3>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">Enterprise Multi-Tenant SaaS ERP Platform</div>
+      <div style="font-size:12px;color:var(--text-light);margin-top:10px;padding:10px;background:var(--bg-surface);border-radius:8px;border:1px solid var(--border-light);">
+        Version 2.5.0 SaaS Control Panel · Multi-Tenant Isolation · Neon PostgreSQL / SQLite Engine
+      </div>
+      <div style="margin-top:16px;font-size:12px;color:var(--text-muted);">
+        © 2026 STORE MANAGEMENT SYSTEMS. All rights reserved.
+      </div>
+    </div>
+  `);
+}
+
 function handleGlobalSearchKey(e) {
   if (e.key === 'Enter') {
     const query = e.target.value.trim();
     if (!query) return;
-    showToast('Search Triggered', `Searching for "${query}" across inventory & records...`, 'info');
-    showSection('stock');
-    const stockSearchInput = document.getElementById('stockSearch');
-    if (stockSearchInput) {
-      stockSearchInput.value = query;
-      stockSearchInput.dispatchEvent(new Event('input'));
+    if (currentUser && currentUser.role === 'Admin') {
+      showToast('Search Triggered', `Searching for "${query}" across organizations & branches...`, 'info');
+      showSection('organizations');
+      setTimeout(() => {
+        const input = document.querySelector('#adminOrgsTable_filter') || document.querySelector('input[placeholder*="Search organization"]');
+        if (input) {
+          input.value = query;
+          filterTable(query, 'adminOrgsTable');
+        }
+      }, 200);
+    } else {
+      showToast('Search Triggered', `Searching for "${query}" across inventory & records...`, 'info');
+      showSection('stock');
+      const stockSearchInput = document.getElementById('stockSearch');
+      if (stockSearchInput) {
+        stockSearchInput.value = query;
+        stockSearchInput.dispatchEvent(new Event('input'));
+      }
     }
   }
 }

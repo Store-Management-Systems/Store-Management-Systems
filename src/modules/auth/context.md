@@ -1,69 +1,44 @@
-# Module: Authentication (`auth`)
+# Module Context: Authentication (`auth`)
+
+## Module Name
+Authentication & Session Management (`auth`)
 
 ## Purpose
-The Authentication module handles JWT user sessions, credential verification, role resolution (Platform Admin, Organization Owner, Branch Staff), session status validation, and safe endpoint redirects.
+Provides secure authentication, password validation, JWT token generation, role resolution, and context auto-repair for Platform Admin, Organization Owners, Branch Managers, and Store Staff.
 
-## Root Cause & Architecture Analysis
-- **Root Cause of Login Issues**: Static web hosting (such as GitHub Pages or standalone file system protocol `file://`) serving frontend static files without a local backend on the same origin was causing relative `/api/auth/login` requests to route to GitHub Pages static 404 paths or fail CORS resolution.
-- **Fix Applied**: 
-  - Dynamic `API_URL` determination automatically targets the active backend API (`http://localhost:3000/api` or `window.SMS_API_URL`).
-  - `GET /api/auth/login` route auto-redirects (HTTP 302) browser navigation attempts to the main application homepage (`/`).
-  - Login error handling prevents premature `handleUnauthorized` invocation while submitting invalid credentials.
+## Responsibilities
+- Validate user login credentials against bcrypt-hashed passwords.
+- Resolve user role (`Admin`, `Owner`, `Manager`, `Staff`, `Cashier`).
+- Look up tenant organization (`organization_id`) and active billable branch locations (`ownedShops`).
+- Auto-repair missing `users.organization_id` column for Organization Owners.
+- Return signed JWT access tokens containing user claims.
+- Provide `/api/auth/me` profile verification endpoint.
 
-## Scoped Login Flows by Role
+## Current Features
+- **Multi-Role Login Endpoint**: `POST /api/auth/login`
+- **Profile Endpoint**: `GET /api/auth/me`
+- **Password Hashing**: `bcryptjs` (salt rounds: 10)
+- **Token Verification**: Signed JWT tokens via `JWT_SECRET`
+- **Auto-Repair Pipeline**: Detects missing `organization_id` on Owner user records and updates the database automatically upon successful login.
 
-### 1. PLATFORM ADMIN (`role === 'Admin'`)
-```
-Admin Login Credentials
-          ↓
-Authentication Successful
-          ↓
-Role = Platform Admin ('Admin')
-          ↓
-Skip Organization/Branch Requirement (org_id = null)
-          ↓
-Admin Dashboard
-```
-- **Organization & Branch Rule**: Platform Admin operates at SaaS platform level and does NOT require `organization_id` or `branch_id` to authenticate or access the Admin Dashboard.
-- **Middleware Rule**: `auth` middleware skips tenant status checks for `Admin` user tokens.
+## Business Rules
+1. Platform Admin (`role = 'Admin'`) logs in without requiring an `organization_id` or `shop_id`.
+2. Organization Owners MUST be resolved to their primary `organization_id`.
+3. If an Owner account has a null `organization_id` in `users`, backend queries `organizations` where `owner_id = user.id` and repairs `users.organization_id`.
+4. Password verification MUST fail gracefully with HTTP 401 Unauthorized for invalid credentials.
+5. Inactive users (`status != 'active'`) are blocked from logging in.
 
-### 2. ORGANIZATION OWNER (`role === 'Owner'`)
-```
-Owner Credentials
-          ↓
-Authentication Successful
-          ↓
-Role = Organization Owner ('Owner')
-          ↓
-Resolve organization_id
-          ↓
-Validate Organization Status (!= 'deleted' && != 'inactive')
-          ↓
-Owner Dashboard
-```
-- **Organization & Branch Rule**: `organization_id` is REQUIRED. `branch_id` is NOT required for accessing the Owner Dashboard. Owners manage multiple branches.
+## Routes & API Endpoints
+- `POST /api/auth/login` (Public): Accepts `{ username, password }`, returns `{ success: true, token, user }`.
+- `GET /api/auth/me` (Protected): Accepts Bearer token, returns live user profile & branch array.
 
-### 3. BRANCH USER / STAFF (`role === 'Staff' | 'Manager'`)
-```
-Staff Credentials
-          ↓
-Authentication Successful
-          ↓
-Role = Staff / Manager
-          ↓
-Resolve organization_id & active_shop_id
-          ↓
-Validate Account & Organization Active Status
-          ↓
-Branch Dashboard / POS Operations
-```
-- **Organization & Branch Rule**: Both `organization_id` and authorized `shop_id` are required for branch-level operational tasks.
+## Components & Files Included
+- Controller: [src/modules/auth/controllers/authController.js](file:///d:/fun/src/modules/auth/controllers/authController.js)
+- Middleware: [src/shared/middleware/auth.js](file:///d:/fun/src/shared/middleware/auth.js)
+- Database Layer: `src/shared/database/index.js`
 
----
+## Recent Changes & Changelog
 
-## API Endpoints
-- `POST /api/auth/login`: Credential authentication returning signed JWT token and user profile.
-- `GET /api/auth/login`: Automatic HTTP 302 redirect to `/` (Homepage UI).
-- `GET /api/auth/me`: Session validation returning current user profile, branches, and permissions.
-- `POST /api/auth/change-password`: Current password verification and bcrypt hash update.
-- `POST /api/auth/logout`: Clears authentication cookie.
+### Version 2.5.0 (2026-07-31)
+- **Auto-Repair Pipeline Introduced**: Reordered `orgDetails` lookup prior to `ownedShops` execution in `login` and `getMe` controllers to auto-repair missing `users.organization_id`.
+- **Role Sync in Middleware**: Updated `auth.js` middleware to sync `req.user.role` with `dbUser.role` on every protected request.

@@ -54,9 +54,21 @@
           <span class="sidebar-nav-icon">📊</span>
           <span class="sidebar-nav-text">Dashboard</span>
         </button>
-        <button class="sidebar-nav-item" id="side-organizations" style="display:none;" onclick="openOrganizationsModal()">
+        <button class="sidebar-nav-item" id="side-organizations" style="display:none;" onclick="showSection('organizations')">
           <span class="sidebar-nav-icon">🏢</span>
           <span class="sidebar-nav-text">Organizations</span>
+        </button>
+        <button class="sidebar-nav-item" id="side-branches" style="display:none;" onclick="showSection('branches')">
+          <span class="sidebar-nav-icon">📍</span>
+          <span class="sidebar-nav-text">Branches</span>
+        </button>
+        <button class="sidebar-nav-item" id="side-subscriptions" style="display:none;" onclick="showSection('subscriptions')">
+          <span class="sidebar-nav-icon">💳</span>
+          <span class="sidebar-nav-text">Subscriptions</span>
+        </button>
+        <button class="sidebar-nav-item" id="side-approvals" style="display:none;" onclick="showSection('approvals')">
+          <span class="sidebar-nav-icon">🛡️</span>
+          <span class="sidebar-nav-text">Pending Approvals</span>
         </button>
         <button class="sidebar-nav-item" id="side-people" onclick="showSection('people')">
           <span class="sidebar-nav-icon">👥</span>
@@ -81,6 +93,10 @@
         <button class="sidebar-nav-item" id="side-settings" onclick="showSection('settings')">
           <span class="sidebar-nav-icon">⚙️</span>
           <span class="sidebar-nav-text">Settings</span>
+        </button>
+        <button class="sidebar-nav-item" id="side-about" style="display:none;" onclick="openAboutModal()">
+          <span class="sidebar-nav-icon">ℹ️</span>
+          <span class="sidebar-nav-text">About</span>
         </button>
       </nav>
     </aside>
@@ -120,7 +136,7 @@
           </button>
 
           <!-- Reports Export Modal -->
-          <button onclick="openReportsModal()" title="Export Reports" class="theme-toggle-btn">📊</button>
+          <button onclick="openReportsModal()" id="btnTopReports" title="Export Reports" class="theme-toggle-btn">📊</button>
 
           <!-- Light / Dark Theme Switcher -->
           <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleAppTheme()"
