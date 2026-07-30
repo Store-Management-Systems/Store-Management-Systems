@@ -3199,7 +3199,6 @@ async function submitOrganizationSettings() {
     }
   } catch (e) { alert(e.message || 'Failed to update organization settings'); }
 }
-}
 
 function uploadLogo(input) {
   const file = input.files[0];
