@@ -1,0 +1,11 @@
+"use strict";
+const express = require('express');
+const router = express.Router();
+const roleController = require('../controllers/roleController');
+const { authenticate, checkPermission } = require('../../../shared');
+router.get('/permissions', authenticate, checkPermission('Users'), roleController.getPermissionsList);
+router.get('/', authenticate, checkPermission('Users'), roleController.getRoles);
+router.post('/', authenticate, checkPermission('Users'), roleController.createRole);
+router.put('/:id', authenticate, checkPermission('Users'), roleController.updateRole);
+router.delete('/:id', authenticate, checkPermission('Users'), roleController.deleteRole);
+module.exports = router;

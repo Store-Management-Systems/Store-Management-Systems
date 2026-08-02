@@ -1,0 +1,14 @@
+"use strict";
+const express = require('express');
+const router = express.Router();
+const subscriptionController = require('../controllers/subscriptionController');
+const { authenticate, checkPermission } = require('../../../shared');
+router.get('/stats', authenticate, subscriptionController.getSubscriptionStats);
+router.get('/', authenticate, subscriptionController.getSubscriptions);
+router.get('/:id', authenticate, subscriptionController.getSubscriptionById);
+router.put('/:id/status', authenticate, subscriptionController.updatePaymentStatus);
+router.put('/:id/payment-mode', authenticate, subscriptionController.updatePaymentMode);
+router.put('/:id/plan', authenticate, subscriptionController.changePlan);
+router.post('/:id/renew', authenticate, subscriptionController.renewSubscription);
+router.post('/:id/extend', authenticate, subscriptionController.extendExpiryDate);
+module.exports = router;
