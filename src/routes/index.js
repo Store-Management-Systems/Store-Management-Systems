@@ -9,15 +9,17 @@ const usersModule = require('../modules/users');
 const inventoryModule = require('../modules/inventory');
 const customersModule = require('../modules/customers');
 const billingModule = require('../modules/billing');
-const approvalsModule = require('../modules/approvals');
 const reportsModule = require('../modules/reports');
 const settingsModule = require('../modules/settings');
 const notificationsModule = require('../modules/notifications');
+
+const subscriptionsModule = require('../modules/subscriptions');
 
 router.use('/auth', authModule.routes);
 router.use('/dashboard', dashboardModule.routes);
 router.use('/organizations', organizationModule.routes);
 router.use('/shops', shopsModule.routes);
+router.use('/subscriptions', subscriptionsModule.routes);
 
 router.use('/users', usersModule.routes.users);
 router.use('/roles', usersModule.routes.roles);
@@ -35,8 +37,6 @@ router.use('/ledgers', customersModule.routes.ledgers);
 router.use('/bills', billingModule.routes.bills);
 router.use('/purchases', billingModule.routes.purchases);
 router.use('/payments', billingModule.routes.payments);
-
-router.use('/approvals', approvalsModule.routes);
 
 router.use('/reports', reportsModule.routes.reports);
 router.use('/analytics', reportsModule.routes.analytics);

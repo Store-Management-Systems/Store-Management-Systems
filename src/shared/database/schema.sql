@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS users (
     permissions TEXT DEFAULT '[]',
     status TEXT DEFAULT 'active',
     phone TEXT,
+    force_password_change INTEGER DEFAULT 0,
+    last_password_reset_at DATETIME,
+    last_password_reset_by TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -136,15 +139,6 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id TEXT PRIMARY KEY,
-    shop_id TEXT NOT NULL,
-    user_id TEXT,
-    action TEXT NOT NULL,
-    details TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS notifications (
     id TEXT PRIMARY KEY,
     shop_id TEXT NOT NULL,
@@ -174,6 +168,25 @@ CREATE TABLE IF NOT EXISTS organizations (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id TEXT PRIMARY KEY,
+    subscription_id TEXT UNIQUE NOT NULL,
+    organization_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    plan_id TEXT DEFAULT 'monthly',
+    plan_name TEXT DEFAULT 'Monthly Plan',
+    subscription_amount REAL DEFAULT 999,
+    payment_status TEXT DEFAULT 'Unpaid',
+    payment_mode TEXT DEFAULT 'Cash',
+    subscription_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+    renewal_date DATETIME,
+    expiry_date DATETIME,
+    auto_renew_enabled INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS platform_settings (
     id TEXT PRIMARY KEY,
     platform_name TEXT DEFAULT 'STORE MANAGEMENT SYSTEMS',
@@ -183,7 +196,6 @@ CREATE TABLE IF NOT EXISTS platform_settings (
     default_currency TEXT DEFAULT '₹',
     default_price_per_branch REAL DEFAULT 999,
     session_timeout_minutes INTEGER DEFAULT 15,
-    auto_approval_hours INTEGER DEFAULT 8,
     system_status TEXT DEFAULT 'Operational',
     version TEXT DEFAULT 'v2.5.0 SaaS Enterprise',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

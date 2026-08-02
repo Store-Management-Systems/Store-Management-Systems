@@ -7,8 +7,11 @@ const getItems = async (req, res) => {
         const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
         const search = req.query.search || '';
         const category = req.query.category || '';
+        const limit = parseInt(req.query.limit) || (req.query.all === 'true' ? 5000 : 100);
+        const lastId = req.query.last_id || null;
 
-        let sql = `SELECT * FROM items WHERE shop_id = ? AND status = 'active'`;
+        let sql = `SELECT id, shop_id, name, category, unit, buy_price, selling_price, price, stock, qty, status, created_at 
+                   FROM items WHERE shop_id = ? AND status = 'active'`;
         const params = [targetShop];
 
         if (search) {
@@ -19,8 +22,13 @@ const getItems = async (req, res) => {
             sql += ` AND category = ?`;
             params.push(category);
         }
+        if (lastId) {
+            sql += ` AND id < ?`;
+            params.push(lastId);
+        }
 
-        sql += ` ORDER BY created_at DESC`;
+        sql += ` ORDER BY created_at DESC, id DESC LIMIT ?`;
+        params.push(limit);
 
         const items = await db.prepare(sql).all(params);
         return success(res, 'Items retrieved successfully', items);

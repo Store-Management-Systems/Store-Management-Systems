@@ -89,14 +89,25 @@ const getBillStats = async (req, res) => {
     try {
         const targetShop = req.user.role === 'Admin' && req.query.shop_id ? req.query.shop_id : req.user.active_shop_id;
 
-        const todaySalesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
-        const totalBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ?`).get(targetShop);
-        const paidBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND payment_status = 'Paid' AND status != 'Cancelled'`).get(targetShop);
-        const creditBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND (payment_status = 'Unpaid' OR payment_status = 'Partially Paid') AND status != 'Cancelled'`).get(targetShop);
-        const cancelledBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Cancelled'`).get(targetShop);
-        const draftBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Draft'`).get(targetShop);
-        const totalRevenueRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop);
-        const totalDueRes = await db.prepare(`SELECT SUM(due_amount) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND due_amount > 0`).get(targetShop);
+        const [
+            todaySalesRes,
+            totalBillsRes,
+            paidBillsRes,
+            creditBillsRes,
+            cancelledBillsRes,
+            draftBillsRes,
+            totalRevenueRes,
+            totalDueRes
+        ] = await Promise.all([
+            db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ?`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND payment_status = 'Paid' AND status != 'Cancelled'`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND (payment_status = 'Unpaid' OR payment_status = 'Partially Paid') AND status != 'Cancelled'`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Cancelled'`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status = 'Draft'`).get(targetShop),
+            db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop),
+            db.prepare(`SELECT SUM(due_amount) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND due_amount > 0`).get(targetShop)
+        ]);
 
         const totalRevenue = parseFloat(totalRevenueRes?.sum || 0);
         const validBillsCount = parseInt(totalBillsRes?.count || 0) - parseInt(cancelledBillsRes?.count || 0);

@@ -123,6 +123,7 @@ const login = async (req, res) => {
                 organization_id: payload.organization_id,
                 organization: orgDetails || null,
                 permissions,
+                force_password_change: user.force_password_change || 0,
                 branches: ownedShops || [],
                 shop: shop ? {
                     id: shop.id,
@@ -144,7 +145,7 @@ const login = async (req, res) => {
 
 const getMe = async (req, res) => {
     try {
-        const user = await db.prepare('SELECT id, name, username, email, role, shop_id, organization_id, permissions, status, phone FROM users WHERE id = ?').get(req.user.id);
+        const user = await db.prepare('SELECT id, name, username, email, role, shop_id, organization_id, permissions, status, phone, force_password_change, last_password_reset_at, last_password_reset_by FROM users WHERE id = ?').get(req.user.id);
 
         if (!user) {
             return error(res, 'User session invalid', 401);
@@ -218,12 +219,34 @@ const changePassword = async (req, res) => {
         }
 
         const hashed = bcrypt.hashSync(newPassword, 10);
-        await db.prepare('UPDATE users SET password = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, hashed, req.user.id);
+        await db.prepare('UPDATE users SET password = ?, password_hash = ?, force_password_change = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, hashed, req.user.id);
 
         await logAudit(user.shop_id, user.id, 'Change Password', `User ${user.username} changed password`);
         return success(res, 'Password changed successfully');
     } catch (err) {
         return error(res, err.message || 'Failed to change password', 500);
+    }
+};
+
+const changePasswordForced = async (req, res) => {
+    let { newPassword } = req.body;
+    newPassword = newPassword ? newPassword.trim() : '';
+
+    if (!newPassword || newPassword.length < 6) {
+        return error(res, 'New password must be at least 6 characters long', 400);
+    }
+
+    try {
+        const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+        if (!user) return error(res, 'User not found', 404);
+
+        const hashed = bcrypt.hashSync(newPassword, 10);
+        await db.prepare('UPDATE users SET password = ?, password_hash = ?, force_password_change = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, hashed, req.user.id);
+
+        await logAudit(user.shop_id, user.id, 'Forced Password Update', `User ${user.username} updated required password on login`);
+        return success(res, 'Required password update completed successfully');
+    } catch (err) {
+        return error(res, err.message || 'Failed to update forced password', 500);
     }
 };
 
@@ -236,5 +259,6 @@ module.exports = {
     login,
     getMe,
     changePassword,
+    changePasswordForced,
     logout
 };

@@ -189,7 +189,20 @@ const createOrganization = async (req, res) => {
         `).run(orgId, name, code, ownerId, owner_name || `${name} Owner`, email || null, phone || null, subscription_plan, defaultExpiry, numPricePerBranch, numPricePerBranch);
 
         await recalculateOrganizationSubscription(orgId);
-        await logAudit('system', req.user.id, 'Create Organization', `Created organization '${name}' (${code}) with 1 initial active branch`);
+
+        // Automatic Subscription Record for Initial Default Branch
+        const subPk = 'sub_' + uuidv4().substring(0, 8);
+        const subId = 'SUB-' + Date.now();
+        const now = new Date();
+        const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        await db.prepare(`
+            INSERT INTO subscriptions (
+                id, subscription_id, organization_id, branch_id, plan_id, plan_name,
+                subscription_amount, payment_status, payment_mode, subscription_start,
+                renewal_date, expiry_date, auto_renew_enabled, status
+            ) VALUES (?, ?, ?, ?, 'monthly', 'Monthly Plan', ?, 'Unpaid', 'Cash', ?, ?, ?, 1, 'Active')
+        `).run(subPk, subId, orgId, defaultShopId, numPricePerBranch, now.toISOString(), expiryDate, expiryDate).catch(() => {});
 
         return success(res, 'Organization created successfully', {
             id: orgId,
@@ -201,7 +214,8 @@ const createOrganization = async (req, res) => {
             subscription_expiry: defaultExpiry,
             active_branch_count: 1,
             price_per_branch: numPricePerBranch,
-            subscription_amount: numPricePerBranch
+            subscription_amount: numPricePerBranch,
+            subscription_id: subId
         }, 201);
     } catch (err) {
         return error(res, err.message, 500);

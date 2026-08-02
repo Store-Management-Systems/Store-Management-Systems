@@ -221,78 +221,92 @@ const getDashboardStats = async (req, res) => {
         }
 
         // -------------------------------------------------------------
-        // 3. STAFF / SINGLE BRANCH DASHBOARD
+        // 3. STAFF / SINGLE BRANCH DASHBOARD (Optimized with Promise.all & SQL Aggregations)
         // -------------------------------------------------------------
         const targetShop = req.user.active_shop_id;
-
-        // 1. Items Summary
-        const totalItemsRes = await db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active'`).get(targetShop);
-        const lowStockRes = await db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active' AND stock <= 5`).get(targetShop);
-        const lowStockItems = await db.prepare(`SELECT id, name, stock, unit, category FROM items WHERE shop_id = ? AND status = 'active' AND stock <= 5 LIMIT 10`).all(targetShop);
-
-        // 2. Revenue & Sales Metrics
-        const todayRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
-        const totalRevRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop);
-        const todayBillsRes = await db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop);
-
-        // 3. Recent Bills
-        const recentBills = await db.prepare(`SELECT * FROM bills WHERE shop_id = ? ORDER BY created_at DESC LIMIT 5`).all(targetShop);
-
-        // 4. People & B2B/B2C Outstanding Calculations
-        const people = await db.prepare(`SELECT * FROM people WHERE shop_id = ? AND status != 'Deleted'`).all(targetShop);
-
-        let customerCount = 0;
-        let customerActiveCount = 0;
-        let customerOutstanding = 0;
-
-        let partyCount = 0;
-        let partyReceivable = 0;
-        let partyOverdue = 0;
-
-        let supplierCount = 0;
-        let supplierPayable = 0;
-        let supplierOverdue = 0;
-
-        for (const p of people) {
-            const openBal = parseFloat(p.opening_balance || 0);
-
-            if (p.category === 'Supplier') {
-                supplierCount++;
-                const purchRes = await db.prepare(`SELECT SUM(total) as sum FROM purchases WHERE supplier_id = ?`).get(p.id);
-                const payRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE person_id = ? AND type = 'out'`).get(p.id);
-                const due = (parseFloat(purchRes?.sum || 0) - parseFloat(payRes?.sum || 0)) + openBal;
-                if (due > 0) {
-                    supplierPayable += due;
-                    supplierOverdue += due;
-                }
-            } else if (p.category === 'Party') {
-                partyCount++;
-                const salesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE person_id = ? OR customer_phone = ?`).get(p.id, p.mobile);
-                const payRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE person_id = ? AND type = 'in'`).get(p.id);
-                const due = (parseFloat(salesRes?.sum || 0) - parseFloat(payRes?.sum || 0)) + openBal;
-                if (due > 0) {
-                    partyReceivable += due;
-                    partyOverdue += due;
-                }
-            } else {
-                customerCount++;
-                if (p.status === 'Active') customerActiveCount++;
-                const salesRes = await db.prepare(`SELECT SUM(total) as sum FROM bills WHERE person_id = ? OR customer_phone = ?`).get(p.id, p.mobile);
-                const payRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE person_id = ? AND type = 'in'`).get(p.id);
-                const due = (parseFloat(salesRes?.sum || 0) - parseFloat(payRes?.sum || 0)) + openBal;
-                if (due > 0) customerOutstanding += due;
-            }
+        const cacheKey = `dashboard:${targetShop}:${role}`;
+        const cachedDashboard = cache.get(cacheKey);
+        if (cachedDashboard) {
+            return success(res, 'Branch dashboard statistics loaded (cached)', cachedDashboard);
         }
 
-        // 5. Today's Collections & Payments
-        const todayCollectionsRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE shop_id = ? AND type = 'in' AND created_at >= CURRENT_DATE`).get(targetShop);
-        const todayPaymentsRes = await db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE shop_id = ? AND type = 'out' AND created_at >= CURRENT_DATE`).get(targetShop);
+        const [
+            totalItemsRes,
+            lowStockRes,
+            lowStockItems,
+            todayRevRes,
+            totalRevRes,
+            todayBillsRes,
+            recentBills,
+            peopleCategoryStats,
+            supplierPurchasesRes,
+            peoplePaymentsRes,
+            peopleSalesRes,
+            todayCollectionsRes,
+            todayPaymentsRes
+        ] = await Promise.all([
+            // 1. Items
+            db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active'`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM items WHERE shop_id = ? AND status = 'active' AND stock <= 5`).get(targetShop),
+            db.prepare(`SELECT id, name, stock, unit, category FROM items WHERE shop_id = ? AND status = 'active' AND stock <= 5 ORDER BY stock ASC LIMIT 10`).all(targetShop),
+
+            // 2. Revenue & Sales
+            db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop),
+            db.prepare(`SELECT SUM(total) as sum FROM bills WHERE shop_id = ? AND status != 'Cancelled'`).get(targetShop),
+            db.prepare(`SELECT COUNT(*) as count FROM bills WHERE shop_id = ? AND status != 'Cancelled' AND created_at >= CURRENT_DATE`).get(targetShop),
+
+            // 3. Recent Bills
+            db.prepare(`SELECT id, shop_id, bill_number, customer_name, total, payment_mode, status, created_at FROM bills WHERE shop_id = ? ORDER BY created_at DESC LIMIT 5`).all(targetShop),
+
+            // 4. People Aggregations
+            db.prepare(`SELECT category, COUNT(*) as total_count, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active_count, SUM(COALESCE(opening_balance, 0)) as open_bal FROM people WHERE shop_id = ? AND status != 'Deleted' GROUP BY category`).all(targetShop),
+            db.prepare(`SELECT SUM(COALESCE(pur.total, 0)) as sum FROM purchases pur JOIN people p ON pur.supplier_id = p.id WHERE p.shop_id = ? AND p.status != 'Deleted' AND p.category = 'Supplier'`).get(targetShop),
+            db.prepare(`SELECT p.category, pay.type, SUM(COALESCE(pay.amount, 0)) as sum FROM payments pay JOIN people p ON pay.person_id = p.id WHERE p.shop_id = ? AND p.status != 'Deleted' GROUP BY p.category, pay.type`).all(targetShop),
+            db.prepare(`SELECT p.category, SUM(COALESCE(b.total, 0)) as sum FROM bills b JOIN people p ON (b.person_id = p.id OR b.customer_phone = p.mobile) WHERE p.shop_id = ? AND p.status != 'Deleted' AND b.status != 'Cancelled' GROUP BY p.category`).all(targetShop),
+
+            // 5. Today's Collections & Payments
+            db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE shop_id = ? AND type = 'in' AND created_at >= CURRENT_DATE`).get(targetShop),
+            db.prepare(`SELECT SUM(amount) as sum FROM payments WHERE shop_id = ? AND type = 'out' AND created_at >= CURRENT_DATE`).get(targetShop)
+        ]);
+
+        let customerCount = 0, customerActiveCount = 0, customerOpenBal = 0;
+        let partyCount = 0, partyOpenBal = 0;
+        let supplierCount = 0, supplierOpenBal = 0;
+
+        (peopleCategoryStats || []).forEach(cat => {
+            if (cat.category === 'Supplier') {
+                supplierCount = parseInt(cat.total_count || 0);
+                supplierOpenBal = parseFloat(cat.open_bal || 0);
+            } else if (cat.category === 'Party') {
+                partyCount = parseInt(cat.total_count || 0);
+                partyOpenBal = parseFloat(cat.open_bal || 0);
+            } else {
+                customerCount = parseInt(cat.total_count || 0);
+                customerActiveCount = parseInt(cat.active_count || 0);
+                customerOpenBal = parseFloat(cat.open_bal || 0);
+            }
+        });
+
+        // Supplier Outstanding = Purchases - Payments Out + Opening Balance
+        const supplierPurchases = parseFloat(supplierPurchasesRes?.sum || 0);
+        const supplierPaymentsOut = parseFloat((peoplePaymentsRes || []).find(p => p.category === 'Supplier' && p.type === 'out')?.sum || 0);
+        const supplierPayable = Math.max(0, (supplierPurchases - supplierPaymentsOut) + supplierOpenBal);
+
+        // Party Outstanding = Sales - Payments In + Opening Balance
+        const partySales = parseFloat((peopleSalesRes || []).find(p => p.category === 'Party')?.sum || 0);
+        const partyPaymentsIn = parseFloat((peoplePaymentsRes || []).find(p => p.category === 'Party' && p.type === 'in')?.sum || 0);
+        const partyReceivable = Math.max(0, (partySales - partyPaymentsIn) + partyOpenBal);
+
+        // Customer Outstanding = Sales - Payments In + Opening Balance
+        const customerSales = parseFloat((peopleSalesRes || []).find(p => p.category === 'Customer')?.sum || 0);
+        const customerPaymentsIn = parseFloat((peoplePaymentsRes || []).find(p => p.category === 'Customer' && p.type === 'in')?.sum || 0);
+        const customerOutstanding = Math.max(0, (customerSales - customerPaymentsIn) + customerOpenBal);
 
         const totalReceivable = customerOutstanding + partyReceivable;
         const totalPayable = supplierPayable;
         const netOutstanding = totalReceivable - totalPayable;
 
-        return success(res, 'Branch dashboard statistics loaded', {
+        const responsePayload = {
             mode: 'Branch',
             items: {
                 total: parseInt(totalItemsRes?.count || 0),
@@ -315,12 +329,12 @@ const getDashboardStats = async (req, res) => {
             partiesWidget: {
                 total: partyCount,
                 receivable: partyReceivable,
-                overdue: partyOverdue
+                overdue: partyReceivable
             },
             suppliersWidget: {
                 total: supplierCount,
                 payable: supplierPayable,
-                overdue: supplierOverdue
+                overdue: supplierPayable
             },
             financeWidget: {
                 totalReceivable,
@@ -329,7 +343,12 @@ const getDashboardStats = async (req, res) => {
                 todayCollections: parseFloat(todayCollectionsRes?.sum || 0),
                 todayPayments: parseFloat(todayPaymentsRes?.sum || 0)
             }
-        });
+        };
+
+        // Cache for 15 seconds
+        cache.set(cacheKey, responsePayload, 15);
+
+        return success(res, 'Branch dashboard statistics loaded', responsePayload);
 
     } catch (err) {
         return error(res, err.message || 'Failed to load dashboard metrics', 500);

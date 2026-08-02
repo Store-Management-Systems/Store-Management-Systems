@@ -260,21 +260,6 @@ async function initNeonDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
-            CREATE TABLE IF NOT EXISTS approvals (
-                id VARCHAR(50) PRIMARY KEY,
-                shop_id VARCHAR(50),
-                requester_id VARCHAR(50) NOT NULL,
-                requester_name VARCHAR(150),
-                type VARCHAR(50) NOT NULL,
-                entity_id VARCHAR(50),
-                title VARCHAR(255) NOT NULL,
-                payload TEXT NOT NULL,
-                status VARCHAR(20) DEFAULT 'pending',
-                auto_approve_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                processed_at TIMESTAMP
-            );
-
             CREATE TABLE IF NOT EXISTS organizations (
                 id VARCHAR(50) PRIMARY KEY,
                 name VARCHAR(150) NOT NULL,
@@ -295,6 +280,25 @@ async function initNeonDatabase() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id VARCHAR(50) PRIMARY KEY,
+                subscription_id VARCHAR(50) UNIQUE NOT NULL,
+                organization_id VARCHAR(50) NOT NULL,
+                branch_id VARCHAR(50) NOT NULL,
+                plan_id VARCHAR(50) DEFAULT 'monthly',
+                plan_name VARCHAR(100) DEFAULT 'Monthly Plan',
+                subscription_amount NUMERIC DEFAULT 999,
+                payment_status VARCHAR(30) DEFAULT 'Unpaid',
+                payment_mode VARCHAR(50) DEFAULT 'Cash',
+                subscription_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                renewal_date TIMESTAMP,
+                expiry_date TIMESTAMP,
+                auto_renew_enabled INT DEFAULT 1,
+                status VARCHAR(30) DEFAULT 'Active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS platform_settings (
                 id VARCHAR(50) PRIMARY KEY,
                 platform_name VARCHAR(150) DEFAULT 'STORE MANAGEMENT SYSTEMS',
@@ -304,14 +308,13 @@ async function initNeonDatabase() {
                 default_currency VARCHAR(10) DEFAULT '₹',
                 default_price_per_branch NUMERIC DEFAULT 999,
                 session_timeout_minutes INT DEFAULT 15,
-                auto_approval_hours INT DEFAULT 8,
                 system_status VARCHAR(50) DEFAULT 'Operational',
                 version VARCHAR(50) DEFAULT 'v2.5.0 SaaS Enterprise',
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
-            INSERT INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
-            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise')
+            INSERT INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, system_status, version)
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 'Operational', 'v2.5.0 SaaS Enterprise')
             ON CONFLICT (id) DO NOTHING;
         `);
 
@@ -350,20 +353,48 @@ async function initNeonDatabase() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS salary NUMERIC DEFAULT 0;
 
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS force_password_change INT DEFAULT 0;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS last_password_reset_at TIMESTAMP;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS last_password_reset_by VARCHAR(50);
+
+            DROP TABLE IF EXISTS approvals;
+            DROP TABLE IF EXISTS audit_logs;
+
             UPDATE shops SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
             UPDATE settings SET logo = 'assets/logos/logo.png' WHERE logo IS NULL OR logo = '' OR logo = 'logo.png';
         `);
 
-        // 2. Indexes
+        // 2. Indexes for 1M+ Record High-Performance Querying
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_pg_items_shop ON items(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_items_shop_status ON items(shop_id, status);
+            CREATE INDEX IF NOT EXISTS idx_pg_items_shop_name ON items(shop_id, name);
+            CREATE INDEX IF NOT EXISTS idx_pg_items_shop_cat ON items(shop_id, category);
+
             CREATE INDEX IF NOT EXISTS idx_pg_bills_shop ON bills(shop_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_bills_shop_created ON bills(shop_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_pg_bills_person ON bills(person_id);
             CREATE INDEX IF NOT EXISTS idx_pg_bills_created ON bills(created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_pg_bill_items_bill ON bill_items(bill_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_bill_items_item ON bill_items(item_id);
+
             CREATE INDEX IF NOT EXISTS idx_pg_people_shop_cat ON people(shop_id, category);
+            CREATE INDEX IF NOT EXISTS idx_pg_people_shop_mobile ON people(shop_id, mobile);
+            CREATE INDEX IF NOT EXISTS idx_pg_people_shop_name ON people(shop_id, name);
+
             CREATE INDEX IF NOT EXISTS idx_pg_payments_person ON payments(person_id);
-            CREATE INDEX IF NOT EXISTS idx_pg_ledgers_person ON ledgers(person_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_pg_ledgers_person ON ledgers(person_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_pg_purchases_supplier ON purchases(supplier_id);
+
+            CREATE INDEX IF NOT EXISTS idx_pg_stock_logs_shop_created ON stock_logs(shop_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_pg_stock_logs_item ON stock_logs(item_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_notifications_shop_created ON notifications(shop_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_pg_users_org_shop ON users(organization_id, shop_id);
+
+            CREATE INDEX IF NOT EXISTS idx_pg_subscriptions_org ON subscriptions(organization_id, status);
+            CREATE INDEX IF NOT EXISTS idx_pg_subscriptions_branch ON subscriptions(branch_id);
+            CREATE INDEX IF NOT EXISTS idx_pg_subscriptions_payment ON subscriptions(payment_status, expiry_date);
         `);
 
         // 3. Seed Default Shop

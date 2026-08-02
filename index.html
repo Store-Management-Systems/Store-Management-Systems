@@ -7,10 +7,10 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0f172a">
-  <title>STORE MANAGEMENT SYSTEMS — Enterprise SaaS ERP</title>
+  <meta name="theme-color" content="#FAFAF8">
+  <title>STORE MANAGEMENT SYSTEMS — Mobile PWA</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css?v=2.1.0">
+  <link rel="stylesheet" href="style.css?v=2.2.0">
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -19,7 +19,7 @@
             registration.update();
           }
         });
-        navigator.serviceWorker.register('/sw.js?v=2.1.0').catch(err => console.log('SW reg error:', err));
+        navigator.serviceWorker.register('/sw.js?v=2.2.0').catch(err => console.log('SW reg error:', err));
       });
     }
   </script>
@@ -30,222 +30,105 @@
   <!-- Floating Toast Notifications Container -->
   <div id="toastContainer"></div>
 
-  <!-- Main Application UI -->
+  <!-- Mobile PWA Application Viewport Container (Max 430px) -->
   <div id="app" style="display:none;">
 
-    <!-- Enterprise Sidebar Navigation -->
-    <aside class="app-sidebar" id="appSidebar">
-      <div class="sidebar-header">
-        <a href="#" class="sidebar-brand" onclick="showSection('dashboard'); return false;">
-          <img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS Logo" id="sidebarLogoImg" class="sidebar-logo-img">
-          <span class="sidebar-brand-name">STORE SYSTEMS</span>
-        </a>
-        <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle sidebar">
-          ⚡
-        </button>
+    <!-- Sticky Mobile Top App Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title" id="currentSectionTitle">Dashboard</span>
       </div>
 
-      <div class="sidebar-search">
-        <input type="text" placeholder="Search menu..." onkeyup="filterSidebarMenu(this.value)">
+      <div class="topbar-right">
+        <!-- Quick Search -->
+        <button class="topbar-btn" onclick="openMobileGlobalSearch()" title="Search">🔍</button>
+
+        <!-- Reports Export Modal -->
+        <button class="topbar-btn" onclick="openReportsModal()" title="Export Reports">📊</button>
+
+        <!-- User Profile Avatar Pill -->
+        <div class="user-profile-avatar" id="userAvatarCircle" onclick="handleLogout()" title="Click to Sign Out">A</div>
       </div>
+    </header>
 
-      <nav class="sidebar-nav" id="sidebarNav">
-        <button class="sidebar-nav-item active" id="side-dashboard" onclick="showSection('dashboard')">
-          <span class="sidebar-nav-icon">📊</span>
-          <span class="sidebar-nav-text">Dashboard</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-organizations" style="display:none;" onclick="showSection('organizations')">
-          <span class="sidebar-nav-icon">🏢</span>
-          <span class="sidebar-nav-text">Organizations</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-branches" style="display:none;" onclick="showSection('branches')">
-          <span class="sidebar-nav-icon">📍</span>
-          <span class="sidebar-nav-text">Branches</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-subscriptions" style="display:none;" onclick="showSection('subscriptions')">
-          <span class="sidebar-nav-icon">💳</span>
-          <span class="sidebar-nav-text">Subscriptions</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-approvals" style="display:none;" onclick="showSection('approvals')">
-          <span class="sidebar-nav-icon">🛡️</span>
-          <span class="sidebar-nav-text">Pending Approvals</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-people" onclick="showSection('people')">
-          <span class="sidebar-nav-icon">👥</span>
-          <span class="sidebar-nav-text">Parties & Customers</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-stock" onclick="showSection('stock')">
-          <span class="sidebar-nav-icon">📦</span>
-          <span class="sidebar-nav-text">Inventory Stock</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-bill" onclick="showSection('bill')">
-          <span class="sidebar-nav-icon">🧾</span>
-          <span class="sidebar-nav-text">POS Billing</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-analytics" onclick="showSection('analytics')">
-          <span class="sidebar-nav-icon">📈</span>
-          <span class="sidebar-nav-text">Financial Analytics</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-history" onclick="showSection('history')">
-          <span class="sidebar-nav-icon">📋</span>
-          <span class="sidebar-nav-text">Audit History</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-settings" onclick="showSection('settings')">
-          <span class="sidebar-nav-icon">⚙️</span>
-          <span class="sidebar-nav-text">Settings</span>
-        </button>
-        <button class="sidebar-nav-item" id="side-about" style="display:none;" onclick="openAboutModal()">
-          <span class="sidebar-nav-icon">ℹ️</span>
-          <span class="sidebar-nav-text">About</span>
-        </button>
-      </nav>
-    </aside>
+    <!-- Main Mobile Content Area -->
+    <main class="content" id="mainContent"></main>
 
-    <!-- Main Content Area -->
-    <div class="app-main">
-
-      <!-- Top Bar Header -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
-          <div class="topbar-breadcrumbs" id="topbarBreadcrumbs">
-            <span>Store</span> / <span class="active" id="currentSectionTitle">Dashboard</span>
-          </div>
-        </div>
-
-        <div class="topbar-right">
-          <!-- Global Search -->
-          <div class="global-search-wrapper">
-            <span class="global-search-icon">🔍</span>
-            <input type="text" class="global-search-input" placeholder="Quick Search... (Ctrl+K)" id="globalSearchInput"
-              onkeydown="handleGlobalSearchKey(event)">
-            <span class="global-search-shortcut">⌘K</span>
-          </div>
-
-          <!-- Admin Branch Selector -->
-          <div id="topbarAdminShopSelect" style="display:none;margin-right:4px;">
-            <select id="adminShopDropdown" onchange="handleAdminShopSwitch(this.value)"
-              style="padding:6px 12px;font-size:12px;max-width:160px;border-radius:10px;">
-            </select>
-          </div>
-
-          <!-- Pending Approvals Badge -->
-          <button onclick="openApprovalsModal()" id="btnTopApprovals" title="Pending Approvals"
-            style="background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);padding:0 12px;height:36px;border-radius:18px;cursor:pointer;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;">
-            🛡 Approvals
-          </button>
-
-          <!-- Reports Export Modal -->
-          <button onclick="openReportsModal()" id="btnTopReports" title="Export Reports" class="theme-toggle-btn">📊</button>
-
-          <!-- Light / Dark Theme Switcher -->
-          <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleAppTheme()"
-            title="Switch Light/Dark Theme">
-            🌙
-          </button>
-
-          <!-- User Profile Pill -->
-          <div class="user-profile-pill" onclick="handleLogout()" title="Click to Sign Out">
-            <div class="user-avatar-circle" id="userAvatarCircle">A</div>
-            <div class="user-pill-info">
-              <span class="user-pill-name" id="userPillName">Admin</span>
-              <span class="user-pill-role" id="userPillRole">SUPER ADMIN</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- Section Main View Target Container -->
-      <main class="content" id="mainContent"></main>
-
-    </div>
-
-    <!-- Mobile Floating Navigation Bar -->
-    <div class="bottomnav" id="bottomNav">
+    <!-- Fixed Mobile Bottom Navigation Bar -->
+    <nav class="bottomnav" id="bottomNav">
       <button class="nav-btn active" id="nav-dashboard" onclick="showSection('dashboard')">
         <span class="nav-icon">📊</span>Dashboard
-      </button>
-      <button class="nav-btn" id="nav-people" onclick="showSection('people')">
-        <span class="nav-icon">👥</span>People
-      </button>
-      <button class="nav-btn" id="nav-stock" onclick="showSection('stock')">
-        <span class="nav-icon">📦</span>Stock
-      </button>
-      <button class="nav-btn" id="nav-bill" onclick="showSection('bill')">
-        <span class="nav-icon">🧾</span>Bill
       </button>
       <button class="nav-btn" id="nav-analytics" onclick="showSection('analytics')">
         <span class="nav-icon">📈</span>Analytics
       </button>
-      <button class="nav-btn" id="nav-history" onclick="showSection('history')">
-        <span class="nav-icon">📋</span>History
+      <button class="nav-btn" id="nav-bill" onclick="showSection('bill')">
+        <span class="nav-icon">🧾</span>Orders
       </button>
-    </div>
+      <button class="nav-btn" id="nav-stock" onclick="showSection('stock')">
+        <span class="nav-icon">📦</span>Stock
+      </button>
+      <button class="nav-btn" id="nav-settings" onclick="showSection('settings')">
+        <span class="nav-icon">⚙️</span>Settings
+      </button>
+    </nav>
 
   </div>
 
-  <!-- Glassmorphic Login Overlay Screen -->
-  <div id="loginScreen" class="login-overlay">
-    <div class="login-bg-glow-1"></div>
-    <div class="login-bg-glow-2"></div>
-
-    <div class="login-card fade-in" id="loginCardContainer">
-      <div class="login-logo" id="loginLogo">
-        <img src="assets/logos/logo.png" alt="STORE MANAGEMENT SYSTEMS Logo" class="login-logo-img">
+  <!-- Mobile Login Screen -->
+  <div id="loginScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg-main);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;">
+    <div style="width:100%;max-width:380px;background:#FFFFFF;border-radius:24px;padding:28px 20px;border:1px solid var(--border-light);box-shadow:var(--shadow-float);text-align:center;">
+      <div style="margin-bottom:16px;" id="loginLogo">
+        <img src="assets/logos/logo.png" alt="STORE SYSTEMS Logo" style="width:64px;height:64px;object-fit:contain;border-radius:16px;">
       </div>
-      <h2 class="login-title" id="loginShopName">STORE MANAGEMENT SYSTEMS</h2>
-      <p class="login-subtitle">Enterprise SaaS ERP</p>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px;color:var(--text-primary);" id="loginShopName">STORE SYSTEMS</h2>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:24px;">Mobile SaaS ERP</p>
 
-      <form id="loginForm" action="javascript:void(0);" onsubmit="handleLoginSubmit(event); return false;">
-        <div class="form-group">
+      <form id="loginForm" action="javascript:void(0);" onsubmit="handleLoginSubmit(event); return false;" style="text-align:left;">
+        <div style="margin-bottom:14px;">
           <label class="form-label" for="loginUsername">Username</label>
-          <input type="text" id="loginUsername" name="username" placeholder="Enter username" required autocomplete="username" autofocus>
+          <input type="text" id="loginUsername" name="username" class="form-control" placeholder="Enter username" required autocomplete="username" autofocus>
         </div>
 
-        <div class="form-group">
+        <div style="margin-bottom:14px;">
           <label class="form-label" for="loginPassword">Password</label>
-          <div class="password-input-wrapper" style="position:relative;">
-            <input type="password" id="loginPassword" name="password" placeholder="Enter password" required autocomplete="current-password">
-            <button type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()" aria-label="Show password" aria-pressed="false" class="password-toggle-btn">
-              <span id="togglePasswordIcon">👁</span> <span id="togglePasswordText">Show</span>
+          <div style="position:relative;">
+            <input type="password" id="loginPassword" name="password" class="form-control" placeholder="Enter password" required autocomplete="current-password">
+            <button type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()" aria-label="Show password" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-secondary);">
+              <span id="togglePasswordIcon">👁</span>
             </button>
           </div>
         </div>
 
-        <div
-          style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;font-size:13px;color:#94a3b8;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="rememberMe" checked style="width:auto;accent-color:#3b82f6;"> Remember Me
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-size:12px;color:var(--text-secondary);">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="rememberMe" checked style="accent-color:var(--accent-dark);"> Remember Me
           </label>
-          <span style="color:#3b82f6;cursor:pointer;font-weight:600;"
-            onclick="showToast('Password Reset', 'Contact system support to reset credentials', 'info')">Forgot
-            Password?</span>
+          <span style="color:var(--accent-blue);cursor:pointer;font-weight:700;" onclick="showToast('Password Reset', 'Ask your Admin or Owner to reset password.', 'info')">Forgot?</span>
         </div>
 
-        <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;padding:14px;font-size:15px;">
+        <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;height:48px;font-size:15px;border-radius:14px;">
           🔐 Sign In
         </button>
       </form>
     </div>
   </div>
 
-  <!-- Reusable Modal Overlay -->
+  <!-- Reusable Mobile Bottom-Sheet Modal -->
   <div class="modal-overlay" id="modalOverlay" style="display:none;" onclick="closeModal(event)">
-    <div class="modal" id="modal">
-      <div class="modal-header"
-        style="padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;">
-        <h2 id="modalTitle" style="font-size:18px;font-weight:700;">Modal</h2>
-        <button class="modal-close" onclick="closeModal()"
-          style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-secondary);">✕</button>
+    <div class="modal-container" id="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Modal</h3>
+        <button class="modal-close-btn" onclick="closeModal()">✕</button>
       </div>
-      <div id="modalBody" style="padding:20px;"></div>
+      <div id="modalBody"></div>
     </div>
   </div>
 
   <!-- Thermal Print Container (Hidden) -->
   <div id="printArea" class="print-area" style="display:none;"></div>
 
-  <script src="script.js?v=2.1.0"></script>
+  <script src="script.js?v=2.2.0"></script>
 </body>
 
 </html>

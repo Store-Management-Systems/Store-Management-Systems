@@ -86,7 +86,7 @@ const createShop = async (req, res) => {
             if (userOrg) targetOrgId = userOrg.id;
         }
 
-        const initialStatus = (isSuperAdmin || isOwner) ? 'active' : 'pending_approval';
+        const initialStatus = 'active';
 
         await db.prepare(`
             INSERT INTO shops (
@@ -134,32 +134,31 @@ const createShop = async (req, res) => {
             await db.prepare(`INSERT INTO units (id, shop_id, name) VALUES (?, ?, ?)`).run(`unit_${shopId}_${idx}`, shopId, defaultUnits[idx]);
         }
 
-        if (targetOrgId && initialStatus === 'active') {
+        if (targetOrgId) {
             await recalculateOrganizationSubscription(targetOrgId);
         }
 
-        if (!isSuperAdmin && !isOwner) {
-            const appId = 'app_' + uuidv4().substring(0, 8);
-            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-            await db.prepare(`
-                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
-                VALUES (?, ?, ?, ?, 'branch_create', ?, ?, ?, 'pending', ?)
-            `).run(appId, shopId, req.user.id, req.user.name, shopId, `Create Branch: ${shop_name} (${shop_code})`, JSON.stringify({
-                shopId, shopName: shop_name, name: shop_name, shopCode: shop_code, ownerId: req.user.id, address, phone, gst, currency, taxRate: tax_rate, logo
-            }), autoApproveAt);
+        // Automatic Branch Subscription Record Creation
+        const subPk = 'sub_' + uuidv4().substring(0, 8);
+        const subId = 'SUB-' + Date.now();
+        const now = new Date();
+        const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-            const notifId = 'notif_' + uuidv4().substring(0, 8);
-            await db.prepare(`
-                INSERT INTO notifications (id, shop_id, title, message, type)
-                VALUES (?, 'shop_default_hq', ?, ?, 'warning')
-            `).run(notifId, `New Branch Approval Request: ${shop_name}`, `Branch Owner '${req.user.name}' requested creation of branch '${shop_name}' (${shop_code})`);
+        await db.prepare(`
+            INSERT INTO subscriptions (
+                id, subscription_id, organization_id, branch_id, plan_id, plan_name,
+                subscription_amount, payment_status, payment_mode, subscription_start,
+                renewal_date, expiry_date, auto_renew_enabled, status
+            ) VALUES (?, ?, ?, ?, 'monthly', 'Monthly Plan', 999, 'Unpaid', 'Cash', ?, ?, ?, 1, 'Active')
+        `).run(subPk, subId, targetOrgId || 'org_default_hq', shopId, now.toISOString(), expiryDate, expiryDate).catch(() => {});
 
-            await logAudit(shopId, req.user.id, 'Request Branch Creation', `Submitted branch creation for '${shop_name}' for approval`);
-            return success(res, 'Branch creation submitted for Superadmin approval (Auto-approves in 8 hours)', { shop_id: shopId, status: 'pending_approval' }, 202);
-        }
+        const notifId = 'notif_' + uuidv4().substring(0, 8);
+        await db.prepare(`
+            INSERT INTO notifications (id, shop_id, title, message, type)
+            VALUES (?, 'shop_default_hq', ?, ?, 'info')
+        `).run(notifId, `New Branch Subscription Created: ${shop_name}`, `Branch '${shop_name}' (${shop_code}) added to Subscription Management with initial Unpaid status.`).catch(() => {});
 
-        await logAudit(shopId, req.user.id, 'Create Shop', `Created new shop branch '${shop_name}' (${shop_code})`);
-        return success(res, 'Shop branch created successfully', { shop_id: shopId, owner_id: ownerId, organization_id: targetOrgId }, 201);
+        return success(res, 'Shop branch created successfully with automatic subscription tracking', { shop_id: shopId, owner_id: ownerId, organization_id: targetOrgId, subscription_id: subId }, 201);
     } catch (err) {
         return error(res, err.message || 'Failed to create shop', 400);
     }

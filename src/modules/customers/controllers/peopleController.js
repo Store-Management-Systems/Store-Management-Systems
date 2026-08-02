@@ -8,8 +8,11 @@ const getPeople = async (req, res) => {
         const category = req.query.category || '';
         const search = req.query.search || '';
         const status = req.query.status || '';
+        const limit = parseInt(req.query.limit) || (req.query.all === 'true' ? 5000 : 100);
+        const lastId = req.query.last_id || null;
 
-        let sql = `SELECT * FROM people WHERE shop_id = ? AND status != 'Deleted'`;
+        let sql = `SELECT id, shop_id, category, name, business_name, mobile, alt_mobile, email, gstin, address, opening_balance, credit_limit, status, created_at 
+                   FROM people WHERE shop_id = ? AND status != 'Deleted'`;
         const params = [targetShop];
 
         if (category && category !== 'All') {
@@ -28,17 +31,43 @@ const getPeople = async (req, res) => {
             params.push(q, q, q, q);
         }
 
-        sql += ` ORDER BY created_at DESC`;
+        if (lastId) {
+            sql += ` AND id < ?`;
+            params.push(lastId);
+        }
+
+        sql += ` ORDER BY created_at DESC, id DESC LIMIT ?`;
+        params.push(limit);
 
         const people = await db.prepare(sql).all(params);
 
-        // Compute dynamic due balance and totals for each person
+        if (people.length === 0) {
+            return success(res, 'People records retrieved', []);
+        }
+
+        const personIds = people.map(p => p.id);
+        const placeholders = personIds.map(() => '?').join(',');
+
+        const [purchasesStats, salesStats, paymentsStats] = await Promise.all([
+            db.prepare(`SELECT supplier_id as person_id, SUM(total) as sum, MAX(created_at) as last_date FROM purchases WHERE supplier_id IN (${placeholders}) GROUP BY supplier_id`).all(personIds),
+            db.prepare(`SELECT person_id, SUM(total) as sum, MAX(created_at) as last_date FROM bills WHERE person_id IN (${placeholders}) AND status != 'Cancelled' GROUP BY person_id`).all(personIds),
+            db.prepare(`SELECT person_id, type, SUM(amount) as sum, MAX(created_at) as last_pay FROM payments WHERE person_id IN (${placeholders}) GROUP BY person_id, type`).all(personIds)
+        ]);
+
+        const purchasesMap = new Map((purchasesStats || []).map(r => [r.person_id, r]));
+        const salesMap = new Map((salesStats || []).map(r => [r.person_id, r]));
+        const paymentsMap = new Map();
+        (paymentsStats || []).forEach(r => {
+            if (!paymentsMap.has(r.person_id)) paymentsMap.set(r.person_id, {});
+            paymentsMap.get(r.person_id)[r.type] = r;
+        });
+
         for (const p of people) {
             const openBal = parseFloat(p.opening_balance || 0);
 
             if (p.category === 'Supplier') {
-                const purchRes = await db.prepare(`SELECT SUM(total) as sum, MAX(created_at) as last_date FROM purchases WHERE supplier_id = ?`).get(p.id);
-                const payRes = await db.prepare(`SELECT SUM(amount) as sum, MAX(created_at) as last_pay FROM payments WHERE person_id = ? AND type = 'out'`).get(p.id);
+                const purchRes = purchasesMap.get(p.id);
+                const payRes = paymentsMap.get(p.id)?.['out'];
 
                 const totalPurchases = parseFloat(purchRes?.sum || 0);
                 const totalPaid = parseFloat(payRes?.sum || 0);
@@ -51,8 +80,8 @@ const getPeople = async (req, res) => {
                 p.last_payment_date = payRes?.last_pay || null;
 
             } else {
-                const salesRes = await db.prepare(`SELECT SUM(total) as sum, MAX(created_at) as last_date FROM bills WHERE (person_id = ? OR customer_phone = ?) AND status != 'Cancelled'`).get(p.id, p.mobile);
-                const payRes = await db.prepare(`SELECT SUM(amount) as sum, MAX(created_at) as last_pay FROM payments WHERE person_id = ? AND type = 'in'`).get(p.id);
+                const salesRes = salesMap.get(p.id);
+                const payRes = paymentsMap.get(p.id)?.['in'];
 
                 const totalSales = parseFloat(salesRes?.sum || 0);
                 const totalPaid = parseFloat(payRes?.sum || 0);

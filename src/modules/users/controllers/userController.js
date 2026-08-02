@@ -11,7 +11,7 @@ const getUsers = async (req, res) => {
 
         if (role === 'Admin' && !req.query.shop_id) {
             users = await db.prepare(`
-                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.created_at, s.shop_name
+                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.force_password_change, u.last_password_reset_at, u.last_password_reset_by, u.created_at, s.shop_name
                 FROM users u
                 LEFT JOIN shops s ON u.shop_id = s.id
                 ORDER BY u.created_at DESC
@@ -19,7 +19,7 @@ const getUsers = async (req, res) => {
         } else if (role === 'Owner' && !req.query.shop_id) {
             const orgId = req.user.organization_id || '';
             users = await db.prepare(`
-                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.created_at, s.shop_name
+                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.force_password_change, u.last_password_reset_at, u.last_password_reset_by, u.created_at, s.shop_name
                 FROM users u
                 LEFT JOIN shops s ON u.shop_id = s.id
                 WHERE (u.organization_id = ? OR s.organization_id = ? OR u.shop_id = ?)
@@ -27,7 +27,7 @@ const getUsers = async (req, res) => {
             `).all(orgId, orgId, targetShop);
         } else {
             users = await db.prepare(`
-                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.created_at, s.shop_name
+                SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.force_password_change, u.last_password_reset_at, u.last_password_reset_by, u.created_at, s.shop_name
                 FROM users u
                 LEFT JOIN shops s ON u.shop_id = s.id
                 WHERE u.shop_id = ?
@@ -53,8 +53,11 @@ const getUserById = async (req, res) => {
     const { id } = req.params;
     try {
         const user = await db.prepare(`
-            SELECT id, name, username, email, role, shop_id, organization_id, permissions, status, phone, created_at
-            FROM users WHERE id = ?
+            SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.permissions, u.status, u.phone, u.force_password_change, u.last_password_reset_at, u.last_password_reset_by, u.created_at, s.shop_name, o.name as organization_name
+            FROM users u
+            LEFT JOIN shops s ON u.shop_id = s.id
+            LEFT JOIN organizations o ON u.organization_id = o.id
+            WHERE u.id = ?
         `).get(id);
 
         if (!user) {
@@ -100,8 +103,7 @@ const createUser = async (req, res) => {
             permsArray = ['Dashboard', 'Inventory', 'Billing', 'Reports'];
         }
 
-        const isAuthorizedCreator = req.user.role === 'Admin' || req.user.role === 'Owner';
-        const userStatus = isAuthorizedCreator ? 'active' : 'pending_approval';
+        const userStatus = 'active';
 
         await db.prepare(`
             INSERT INTO users (id, name, username, email, password, password_hash, role, shop_id, organization_id, permissions, status, phone)
@@ -109,32 +111,6 @@ const createUser = async (req, res) => {
         `).run(
             userId, name, username, email || null, hashedPassword, hashedPassword, role, assignedShopId, targetOrgId, JSON.stringify(permsArray), userStatus, phone || null
         );
-
-        if (!isAuthorizedCreator) {
-            const appId = 'app_' + uuidv4().substring(0, 8);
-            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-            await db.prepare(`
-                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
-                VALUES (?, ?, ?, ?, 'user_create', ?, ?, ?, 'pending', ?)
-            `).run(appId, assignedShopId, req.user.id, req.user.name, userId, `Create Staff User: ${username} (${role})`, JSON.stringify({
-                userId, name, username, email, password_hash: hashedPassword, role, shop_id: assignedShopId, permissions: permsArray, phone
-            }), autoApproveAt);
-
-            const notifId = 'notif_' + uuidv4().substring(0, 8);
-            await db.prepare(`
-                INSERT INTO notifications (id, shop_id, title, message, type)
-                VALUES (?, 'shop_default_hq', ?, ?, 'warning')
-            `).run(notifId, `New Staff Approval Request: ${username}`, `User '${req.user.name}' requested creation of staff user '${username}' (${role})`);
-
-            await logAudit(assignedShopId, req.user.id, 'Request User Creation', `Submitted user creation for '${username}' for approval`);
-            return success(res, 'User creation submitted for approval (Auto-approves in 8 hours)', {
-                id: userId,
-                name,
-                username,
-                role,
-                status: 'pending_approval'
-            }, 202);
-        }
 
         await logAudit(assignedShopId, req.user.id, 'Create User', `Created user '${username}' with role '${role}'`);
 
@@ -161,24 +137,9 @@ const updateUser = async (req, res) => {
             return error(res, 'User not found', 404);
         }
 
-        const isAuthorizedCreator = req.user.role === 'Admin' || req.user.role === 'Owner';
         let permsJson = user.permissions;
         if (permissions !== undefined) {
             permsJson = typeof permissions === 'string' ? permissions : JSON.stringify(permissions);
-        }
-
-        if (!isAuthorizedCreator) {
-            const appId = 'app_' + uuidv4().substring(0, 8);
-            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-            await db.prepare(`
-                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
-                VALUES (?, ?, ?, ?, 'user_edit', ?, ?, ?, 'pending', ?)
-            `).run(appId, user.shop_id, req.user.id, req.user.name, id, `Edit Staff User: ${user.username}`, JSON.stringify({
-                userId: id, name, email, role, permissions, status, phone
-            }), autoApproveAt);
-
-            await logAudit(user.shop_id, req.user.id, 'Request User Edit', `Submitted edit request for user ${user.username}`);
-            return success(res, 'User update submitted for approval (Auto-approves in 8 hours)');
         }
 
         await db.prepare(`
@@ -200,27 +161,142 @@ const updateUser = async (req, res) => {
     }
 };
 
-const resetPassword = async (req, res) => {
-    const { id } = req.params;
-    const { newPassword } = req.body;
+const searchUsersForReset = async (req, res) => {
+    try {
+        const { search = '', role = '', shop_id = '', organization_id = '' } = req.query;
+        const callerRole = req.user.role;
+        const callerOrgId = req.user.organization_id;
+        const callerShopId = req.user.shop_id;
 
-    if (!newPassword || newPassword.length < 4) {
-        return error(res, 'New password must be at least 4 characters long', 400);
+        let sql = `
+            SELECT u.id, u.name, u.username, u.email, u.role, u.shop_id, u.organization_id, u.status, u.phone, u.force_password_change, u.last_password_reset_at, u.last_password_reset_by, s.shop_name, o.name as organization_name
+            FROM users u
+            LEFT JOIN shops s ON u.shop_id = s.id
+            LEFT JOIN organizations o ON u.organization_id = o.id
+            WHERE u.status != 'deleted'
+        `;
+        const params = [];
+
+        // Scoping by Caller Role
+        if (callerRole === 'Owner') {
+            sql += ` AND (u.organization_id = ? OR s.organization_id = ?) AND u.role != 'Admin'`;
+            params.push(callerOrgId, callerOrgId);
+        } else if (callerRole === 'Manager') {
+            sql += ` AND u.shop_id = ? AND u.role NOT IN ('Admin', 'Owner')`;
+            params.push(callerShopId);
+        } else if (callerRole !== 'Admin') {
+            return error(res, 'Unauthorized access to password reset search', 403);
+        }
+
+        if (search) {
+            sql += ` AND (LOWER(u.name) LIKE ? OR LOWER(u.username) LIKE ? OR LOWER(u.email) LIKE ? OR u.phone LIKE ? OR u.id LIKE ?)`;
+            const s = `%${search.toLowerCase()}%`;
+            params.push(s, s, s, s, s);
+        }
+
+        if (role) {
+            sql += ` AND u.role = ?`;
+            params.push(role);
+        }
+
+        if (shop_id) {
+            sql += ` AND u.shop_id = ?`;
+            params.push(shop_id);
+        }
+
+        if (organization_id) {
+            sql += ` AND (u.organization_id = ? OR s.organization_id = ?)`;
+            params.push(organization_id, organization_id);
+        }
+
+        sql += ` ORDER BY u.created_at DESC LIMIT 50`;
+
+        const users = await db.prepare(sql).all(params);
+        return success(res, 'Users matching reset search retrieved', users);
+    } catch (err) {
+        return error(res, err.message || 'Failed to search users', 500);
+    }
+};
+
+const resetPassword = async (req, res) => {
+    const targetUserId = req.params.id || req.body.userId;
+    const { newPassword, generateTemp, forceChangeNextLogin } = req.body;
+
+    const caller = req.user;
+    const callerRole = caller.role;
+
+    if (!callerRole || ['Staff', 'Cashier'].includes(callerRole)) {
+        return error(res, 'Unauthorized: You do not have permission to reset passwords.', 403);
+    }
+
+    if (!targetUserId) {
+        return error(res, 'Target user ID is required', 400);
     }
 
     try {
-        const user = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
-        if (!user) {
-            return error(res, 'User not found', 404);
+        const targetUser = await db.prepare(`SELECT * FROM users WHERE id = ?`).get(targetUserId);
+        if (!targetUser) {
+            return error(res, 'Target user record not found', 404);
         }
 
-        const hashedPassword = bcrypt.hashSync(newPassword, 10);
-        await db.prepare(`UPDATE users SET password = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hashedPassword, hashedPassword, id);
+        // -------------------------------------------------------------
+        // RBAC RULES ENFORCEMENT FOR PASSWORD RESET
+        // -------------------------------------------------------------
+        if (callerRole === 'Owner') {
+            const isSameOrg = (targetUser.organization_id && targetUser.organization_id === caller.organization_id);
+            if (!isSameOrg || targetUser.role === 'Admin') {
+                return error(res, 'Unauthorized: Owners can only reset passwords for employees within their own Organization.', 403);
+            }
+        } else if (callerRole === 'Manager') {
+            const isSameShop = (targetUser.shop_id && targetUser.shop_id === caller.shop_id);
+            if (!isSameShop || ['Admin', 'Owner'].includes(targetUser.role)) {
+                return error(res, 'Unauthorized: Managers can only reset passwords for staff in their assigned branch.', 403);
+            }
+        }
 
-        await logAudit(user.shop_id, req.user.id, 'Reset Password', `Reset password for user ${user.username}`);
-        return success(res, `Password reset successfully for user ${user.username}`);
+        let passwordToSet = newPassword;
+        let isTempGenerated = false;
+
+        if (generateTemp || !passwordToSet) {
+            // Auto-generate secure 8-character temporary password
+            passwordToSet = 'Pass-' + Math.floor(1000 + Math.random() * 9000);
+            isTempGenerated = true;
+        }
+
+        if (passwordToSet.length < 6) {
+            return error(res, 'Password must be at least 6 characters long', 400);
+        }
+
+        const hashedPassword = bcrypt.hashSync(passwordToSet, 10);
+        const forceFlag = (forceChangeNextLogin === true || forceChangeNextLogin === 1 || isTempGenerated) ? 1 : 0;
+        const now = new Date().toISOString();
+
+        await db.prepare(`
+            UPDATE users SET
+                password = ?,
+                password_hash = ?,
+                force_password_change = ?,
+                last_password_reset_at = ?,
+                last_password_reset_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(hashedPassword, hashedPassword, forceFlag, now, caller.id, targetUserId);
+
+        const auditDetail = `Reset password for user '${targetUser.name}' (${targetUser.username}, Role: ${targetUser.role}). Force Change: ${forceFlag === 1 ? 'Yes' : 'No'}, Temp: ${isTempGenerated ? 'Yes' : 'No'}`;
+        await logAudit(targetUser.shop_id || caller.shop_id, caller.id, 'Reset Password', auditDetail);
+
+        return success(res, `Password reset successfully for user ${targetUser.username}`, {
+            userId: targetUser.id,
+            username: targetUser.username,
+            name: targetUser.name,
+            role: targetUser.role,
+            temporaryPassword: isTempGenerated ? passwordToSet : null,
+            forcePasswordChange: forceFlag === 1,
+            resetAt: now,
+            resetBy: caller.name || caller.username
+        });
     } catch (err) {
-        return error(res, err.message, 500);
+        return error(res, err.message || 'Failed to reset user password', 500);
     }
 };
 
@@ -238,17 +314,7 @@ const deleteUser = async (req, res) => {
 
         const isAuthorizedCreator = req.user.role === 'Admin' || req.user.role === 'Owner';
         if (!isAuthorizedCreator) {
-            const appId = 'app_' + uuidv4().substring(0, 8);
-            const autoApproveAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
-            await db.prepare(`
-                INSERT INTO approvals (id, shop_id, requester_id, requester_name, type, entity_id, title, payload, status, auto_approve_at)
-                VALUES (?, ?, ?, ?, 'user_delete', ?, ?, ?, 'pending', ?)
-            `).run(appId, user.shop_id, req.user.id, req.user.name, id, `Delete Staff User: ${user.username}`, JSON.stringify({
-                userId: id
-            }), autoApproveAt);
-
-            await logAudit(user.shop_id, req.user.id, 'Request User Deletion', `Submitted deletion request for user ${user.username}`);
-            return success(res, 'User deletion submitted for approval (Auto-approves in 8 hours)');
+            return error(res, 'Unauthorized to delete user accounts', 403);
         }
 
         await db.prepare(`DELETE FROM users WHERE id = ?`).run(id);
@@ -264,6 +330,7 @@ module.exports = {
     getUserById,
     createUser,
     updateUser,
+    searchUsersForReset,
     resetPassword,
     deleteUser
 };

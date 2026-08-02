@@ -73,9 +73,36 @@ function fmtNum(val, decimals = 2) {
   return isNaN(n) ? (0).toFixed(decimals) : n.toFixed(decimals);
 }
 
+// ─── Debounce Utility & Active Abort Controllers ─────────────────────────────
+const activeAbortControllers = new Map();
+
+function debounce(func, wait = 300) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 // ─── API Helper Function ───────────────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem('sms_token');
+
+  // Cancel superseded pending search requests
+  if (endpoint.includes('search=') && !options.signal) {
+    const searchPrefix = endpoint.split('?')[0];
+    if (activeAbortControllers.has(searchPrefix)) {
+      activeAbortControllers.get(searchPrefix).abort();
+    }
+    const controller = new AbortController();
+    activeAbortControllers.set(searchPrefix, controller);
+    options.signal = controller.signal;
+  }
+
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -108,6 +135,9 @@ async function apiFetch(endpoint, options = {}) {
 
     return data;
   } catch (err) {
+    if (err.name === 'AbortError') {
+      return { success: false, aborted: true };
+    }
     console.error(`API Error [${endpoint}]:`, err.message);
     throw err;
   }
@@ -176,7 +206,7 @@ async function checkAuth() {
 
       try { updateRoleUI(); } catch (err) { console.error('Role UI update error:', err); }
       try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
-      try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
+      try { checkAndTriggerForcedPasswordChange(); } catch (err) {}
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
       try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
@@ -249,7 +279,7 @@ async function handleLoginSubmit(e) {
 
       try { updateRoleUI(); } catch (err) { console.error('Role UI update error:', err); }
       try { updateTopbar(); } catch (err) { console.error('Topbar error:', err); }
-      try { await updateApprovalBadge(); } catch (err) { console.error('Approval badge error:', err); }
+      try { checkAndTriggerForcedPasswordChange(); } catch (err) {}
       try { await loadInitialData(); } catch (err) { console.error('Initial data error:', err); }
       try { showSection('dashboard'); } catch (err) { console.error('Section error:', err); }
 
@@ -406,149 +436,73 @@ function updateTopbar() {
   }
   if (sidebarLogoImg) {
     sidebarLogoImg.src = logoSrc;
-  }
-  if (titleEl) {
-    titleEl.textContent = shopTitle;
-  }
-  if (loginLogoEl) {
-    loginLogoEl.innerHTML = `<img src="${logoSrc}" alt="STORE MANAGEMENT SYSTEMS Logo" class="login-logo-img" style="width:100%;height:100%;object-fit:contain;border-radius:20px;">`;
-  }
-  if (loginShopNameEl) {
-    loginShopNameEl.textContent = shopTitle;
+  if (!currentUser) return;
+
+  const userAvatarCircle = document.getElementById('userAvatarCircle');
+  if (userAvatarCircle) {
+    const initial = (currentUser.name || currentUser.username || 'A').charAt(0).toUpperCase();
+    userAvatarCircle.textContent = initial;
   }
 
-  if (currentUser) {
-    const pillName = document.getElementById('userPillName');
-    const pillRole = document.getElementById('userPillRole');
-    const avatarCircle = document.getElementById('userAvatarCircle');
-
-    if (pillName) pillName.textContent = currentUser.name || currentUser.username;
-    if (pillRole) pillRole.textContent = currentUser.role || 'STAFF';
-    if (avatarCircle) avatarCircle.textContent = (currentUser.name || currentUser.username || 'A').charAt(0).toUpperCase();
+  const secTitleEl = document.getElementById('currentSectionTitle');
+  if (secTitleEl) {
+    const titles = {
+      dashboard: 'Dashboard',
+      analytics: 'Analytics',
+      bill: 'POS Billing',
+      stock: 'Inventory Stock',
+      settings: 'Settings',
+      people: 'Parties & Customers',
+      organizations: 'Organizations',
+      branches: 'Branches',
+      subscriptions: 'Subscriptions',
+      history: 'Audit History'
+    };
+    secTitleEl.textContent = titles[currentSection] || 'STORE SYSTEMS';
   }
 }
 
 function updateRoleUI() {
   if (!currentUser) return;
-  const role = currentUser.role;
-
-  const adminShopSelect = document.getElementById('topbarAdminShopSelect');
-  const btnTopReports = document.getElementById('btnTopReports');
-  const btnTopApprovals = document.getElementById('btnTopApprovals');
-
-  const sideOrgs = document.getElementById('side-organizations');
-  const sideBranches = document.getElementById('side-branches');
-  const sideSubs = document.getElementById('side-subscriptions');
-  const sideApprovals = document.getElementById('side-approvals');
-  const sideAbout = document.getElementById('side-about');
-
-  const sidePeople = document.getElementById('side-people');
-  const sideStock = document.getElementById('side-stock');
-  const sideBill = document.getElementById('side-bill');
-  const sideAnalytics = document.getElementById('side-analytics');
-  const sideHistory = document.getElementById('side-history');
-  const sideSettings = document.getElementById('side-settings');
-
   const bottomNav = document.getElementById('bottomNav');
+  if (!bottomNav) return;
 
-  if (role === 'Admin') {
-    // 1. Topbar Header Controls for Platform Admin
-    if (adminShopSelect) adminShopSelect.style.display = 'none';
-    if (btnTopReports) btnTopReports.style.display = 'none';
-    if (btnTopApprovals) btnTopApprovals.style.display = 'inline-flex';
-
-    // 2. Sidebar Navigation for Platform Admin (ONLY SaaS Management)
-    if (sideOrgs) sideOrgs.style.display = 'flex';
-    if (sideBranches) sideBranches.style.display = 'flex';
-    if (sideSubs) sideSubs.style.display = 'flex';
-    if (sideApprovals) sideApprovals.style.display = 'flex';
-    if (sideSettings) sideSettings.style.display = 'flex';
-    if (sideAbout) sideAbout.style.display = 'flex';
-
-    // Permanently hide operational modules from Platform Admin sidebar
-    if (sidePeople) sidePeople.style.display = 'none';
-    if (sideStock) sideStock.style.display = 'none';
-    if (sideBill) sideBill.style.display = 'none';
-    if (sideAnalytics) sideAnalytics.style.display = 'none';
-    if (sideHistory) sideHistory.style.display = 'none';
-
-    // 3. Mobile Bottom Navigation for Platform Admin (ONLY SaaS Management)
-    if (bottomNav) {
-      bottomNav.innerHTML = `
-        <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
-          <span class="nav-icon">📊</span>Dashboard
-        </button>
-        <button class="nav-btn ${currentSection === 'organizations' ? 'active' : ''}" id="nav-organizations" onclick="showSection('organizations')">
-          <span class="nav-icon">🏢</span>Orgs
-        </button>
-        <button class="nav-btn ${currentSection === 'branches' ? 'active' : ''}" id="nav-branches" onclick="showSection('branches')">
-          <span class="nav-icon">📍</span>Branches
-        </button>
-        <button class="nav-btn ${currentSection === 'subscriptions' ? 'active' : ''}" id="nav-subscriptions" onclick="showSection('subscriptions')">
-          <span class="nav-icon">💳</span>Subs
-        </button>
-        <button class="nav-btn ${currentSection === 'approvals' ? 'active' : ''}" id="nav-approvals" onclick="showSection('approvals')">
-          <span class="nav-icon">🛡️</span>Approvals
-        </button>
-        <button class="nav-btn ${currentSection === 'settings' ? 'active' : ''}" id="nav-settings" onclick="showSection('settings')">
-          <span class="nav-icon">⚙️</span>Settings
-        </button>
-      `;
-    }
-
+  if (currentUser.role === 'Admin') {
+    bottomNav.innerHTML = `
+      <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
+        <span class="nav-icon">📊</span>Dashboard
+      </button>
+      <button class="nav-btn ${currentSection === 'organizations' ? 'active' : ''}" id="nav-organizations" onclick="showSection('organizations')">
+        <span class="nav-icon">🏢</span>Orgs
+      </button>
+      <button class="nav-btn ${currentSection === 'branches' ? 'active' : ''}" id="nav-branches" onclick="showSection('branches')">
+        <span class="nav-icon">📍</span>Branches
+      </button>
+      <button class="nav-btn ${currentSection === 'subscriptions' ? 'active' : ''}" id="nav-subscriptions" onclick="showSection('subscriptions')">
+        <span class="nav-icon">💳</span>Subs
+      </button>
+      <button class="nav-btn ${currentSection === 'settings' ? 'active' : ''}" id="nav-settings" onclick="showSection('settings')">
+        <span class="nav-icon">⚙️</span>Settings
+      </button>
+    `;
   } else {
-    // Operational Roles (Owner, Manager, Staff)
-    if (btnTopReports) btnTopReports.style.display = 'inline-flex';
-    if (btnTopApprovals) btnTopApprovals.style.display = 'none';
-
-    if (role === 'Owner') {
-      if (currentUser && currentUser.branches && Array.isArray(currentUser.branches) && currentUser.branches.length > 1) {
-        loadMultiBranchDropdown();
-      } else if (adminShopSelect) {
-        adminShopSelect.style.display = 'none';
-      }
-    } else {
-      if (adminShopSelect) adminShopSelect.style.display = 'none';
-    }
-
-    // Hide Admin-specific SaaS modules from operational users
-    if (sideOrgs) sideOrgs.style.display = 'none';
-    if (sideBranches) sideBranches.style.display = 'none';
-    if (sideSubs) sideSubs.style.display = 'none';
-    if (sideApprovals) sideApprovals.style.display = 'none';
-    if (sideAbout) sideAbout.style.display = 'none';
-
-    // Show operational modules for Store Personnel
-    if (sidePeople) sidePeople.style.display = 'flex';
-    if (sideStock) sideStock.style.display = 'flex';
-    if (sideBill) sideBill.style.display = 'flex';
-    if (sideAnalytics) sideAnalytics.style.display = 'flex';
-    if (sideHistory) sideHistory.style.display = 'flex';
-    if (sideSettings) sideSettings.style.display = 'flex';
-
-    // Mobile Bottom Navigation for Store Personnel
-    if (bottomNav) {
-      bottomNav.innerHTML = `
-        <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
-          <span class="nav-icon">📊</span>Dashboard
-        </button>
-        <button class="nav-btn ${currentSection === 'people' ? 'active' : ''}" id="nav-people" onclick="showSection('people')">
-          <span class="nav-icon">👥</span>People
-        </button>
-        <button class="nav-btn ${currentSection === 'stock' ? 'active' : ''}" id="nav-stock" onclick="showSection('stock')">
-          <span class="nav-icon">📦</span>Stock
-        </button>
-        <button class="nav-btn ${currentSection === 'bill' ? 'active' : ''}" id="nav-bill" onclick="showSection('bill')">
-          <span class="nav-icon">🧾</span>Bill
-        </button>
-        <button class="nav-btn ${currentSection === 'analytics' ? 'active' : ''}" id="nav-analytics" onclick="showSection('analytics')">
-          <span class="nav-icon">📈</span>Analytics
-        </button>
-        <button class="nav-btn ${currentSection === 'history' ? 'active' : ''}" id="nav-history" onclick="showSection('history')">
-          <span class="nav-icon">📋</span>History
-        </button>
-      `;
-    }
+    bottomNav.innerHTML = `
+      <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
+        <span class="nav-icon">📊</span>Dashboard
+      </button>
+      <button class="nav-btn ${currentSection === 'analytics' ? 'active' : ''}" id="nav-analytics" onclick="showSection('analytics')">
+        <span class="nav-icon">📈</span>Analytics
+      </button>
+      <button class="nav-btn ${currentSection === 'bill' ? 'active' : ''}" id="nav-bill" onclick="showSection('bill')">
+        <span class="nav-icon">🧾</span>Orders
+      </button>
+      <button class="nav-btn ${currentSection === 'stock' ? 'active' : ''}" id="nav-stock" onclick="showSection('stock')">
+        <span class="nav-icon">📦</span>Stock
+      </button>
+      <button class="nav-btn ${currentSection === 'settings' ? 'active' : ''}" id="nav-settings" onclick="showSection('settings')">
+        <span class="nav-icon">⚙️</span>Settings
+      </button>
+    `;
   }
 }
 
@@ -3163,42 +3117,9 @@ async function renderSettings(c) {
   const role = currentUser ? currentUser.role : 'Staff';
 
   // -------------------------------------------------------------
-  // 1. PLATFORM SETTINGS (Platform Admin Scope)
+  // 1. GLOBAL SAAS CONFIGURATION CENTER (Super Admin Scope)
   // -------------------------------------------------------------
   if (role === 'Admin') {
-    try {
-      const res = await apiFetch('/settings/platform');
-      const ps = res.data || {};
-
-      c.innerHTML = `
-      <div class="fade-in">
-        <div class="card" style="background:linear-gradient(135deg, rgba(0,122,255,0.06), rgba(88,86,214,0.06));border:1px solid rgba(0,122,255,0.2);">
-          <h3 style="margin-bottom:6px;color:var(--ios-blue);">🌐 STORE MANAGEMENT SYSTEMS — Platform Settings</h3>
-          <div style="font-size:13px;color:var(--text-muted);">Configure global multi-tenant SaaS platform parameters, support contacts, and subscription pricing.</div>
-        </div>
-
-        <div class="card">
-          <h3 style="margin-bottom:14px;">🛠 General SaaS Platform Configuration</h3>
-          <div class="form-group">
-            <label class="form-label">Platform Name *</label>
-            <input type="text" id="psPlatformName" value="${ps.platform_name || 'STORE MANAGEMENT SYSTEMS'}">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Support Email</label>
-              <input type="email" id="psSupportEmail" value="${ps.support_email || 'support@storemanagementsystems.com'}">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Support Phone</label>
-              <input type="tel" id="psSupportPhone" value="${ps.support_phone || '+1-800-SMS-SaaS'}">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Default SaaS Currency</label>
-              <select id="psDefaultCurrency">
-                ${['₹', '$', '€', '£', '¥', '₵'].map(curr => `<option ${(ps.default_currency || '₹') === curr ? 'selected' : ''}>${curr}</option>`).join('')}
-              </select>
             </div>
             <div class="form-group">
               <label class="form-label">Default Price Per Branch / Month</label>
@@ -3208,16 +3129,10 @@ async function renderSettings(c) {
         </div>
 
         <div class="card">
-          <h3 style="margin-bottom:14px;">🔒 Security, Session & Approval Rules</h3>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Session Inactivity Timeout (Minutes)</label>
-              <input type="number" id="psSessionTimeout" value="${ps.session_timeout_minutes || 15}" min="1" max="1440">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Auto-Approval Expiry (Hours)</label>
-              <input type="number" id="psAutoApprovalHours" value="${ps.auto_approval_hours || 8}" min="1" max="72">
-            </div>
+          <h3 style="margin-bottom:14px;">🔒 Security & Session Inactivity Rules</h3>
+          <div class="form-group">
+            <label class="form-label">Session Inactivity Timeout (Minutes)</label>
+            <input type="number" id="psSessionTimeout" value="${ps.session_timeout_minutes || 15}" min="1" max="1440">
           </div>
         </div>
 
@@ -5649,6 +5564,1103 @@ async function saveBrandIdentitySettings() {
     }
   } catch (e) {
     showToast('Error', e.message, 'error');
+  }
+}
+
+// ─── Global Password Reset & Forced Password Change Handlers ──────────────────
+let _selectedResetUser = null;
+
+async function openGlobalPasswordResetModal(selectedUserId = null) {
+  if (!currentUser || ['Staff', 'Cashier'].includes(currentUser.role)) {
+    showToast('Permission Denied', 'Only Admins, Owners, and Managers can reset user passwords.', 'warning');
+    return;
+  }
+
+  _selectedResetUser = null;
+
+  let scopeNotice = 'Super Admin Mode: Search and reset any user across all Organizations & Branches.';
+  if (currentUser.role === 'Owner') {
+    scopeNotice = 'Organization Owner Mode: Search and reset employees within your Organization.';
+  } else if (currentUser.role === 'Manager') {
+    scopeNotice = 'Branch Manager Mode: Search and reset staff within your assigned branch.';
+  }
+
+  const modalHtml = `
+    <div style="padding:4px;">
+      <div style="background:rgba(59,130,246,0.08);border-left:4px solid var(--ios-blue);padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--text-muted);">
+        🔒 <strong>${scopeNotice}</strong>
+      </div>
+
+      <!-- User Search Bar -->
+      <div style="position:relative;margin-bottom:14px;">
+        <label class="form-label" style="font-weight:700;">Find User to Reset Password</label>
+        <input type="text" id="resetUserSearchInput" class="form-control" placeholder="Type Name, Username, Email, Phone, or ID..." onkeyup="debounceSearchResetUsers(this.value)" autocomplete="off">
+        <div id="resetSearchResultsDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border-light);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:220px;overflow-y:auto;z-index:99;margin-top:4px;"></div>
+      </div>
+
+      <!-- Selected User Preview Card -->
+      <div id="resetSelectedUserPreview" style="display:none;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border-light);border-radius:12px;background:var(--bg-secondary, #f8fafc);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div id="resetPreviewName" style="font-weight:800;font-size:15px;color:var(--text-primary);">User Name</div>
+            <div id="resetPreviewUsername" style="font-size:12px;color:var(--text-muted);margin-top:2px;">@username</div>
+            <div id="resetPreviewScope" style="font-size:11px;color:var(--ios-blue);margin-top:4px;font-weight:600;">Org: Main · Branch: HQ</div>
+          </div>
+          <span id="resetPreviewRoleBadge" class="badge badge-paid">ROLE</span>
+        </div>
+        <div id="resetPreviewLastInfo" style="margin-top:8px;font-size:11px;color:var(--text-muted);border-top:1px dashed var(--border-light);padding-top:6px;">
+          Last Reset: Never
+        </div>
+      </div>
+
+      <!-- New Password Controls -->
+      <div id="resetPasswordFormControls" style="display:none;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button type="button" class="btn-sm btn-secondary" onclick="generateTempPasswordForReset()" style="flex:1;">
+            🎲 Generate Temp Password
+          </button>
+          <button type="button" class="btn-sm btn-secondary" onclick="copyTempPasswordToClipboard()" id="btnCopyResetPass" style="display:none;">
+            📋 Copy Password
+          </button>
+        </div>
+
+        <div style="margin-bottom:12px;position:relative;">
+          <label class="form-label" style="font-weight:700;">New Password</label>
+          <div style="position:relative;">
+            <input type="password" id="resetNewPasswordInput" class="form-control" placeholder="Enter new password (min 6 chars)" oninput="updatePasswordStrengthMeter(this.value)">
+            <button type="button" onclick="toggleResetPassVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:14px;" id="btnToggleResetVis">👁</button>
+          </div>
+          <div id="resetPassStrengthMeter" style="font-size:11px;font-weight:700;margin-top:4px;color:var(--text-muted);">
+            Strength: <span id="resetPassStrengthText">None</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+            <input type="checkbox" id="resetForceChangeCheckbox" checked style="width:16px;height:16px;accent-color:var(--ios-blue);">
+            Force password change on user's next login
+          </label>
+        </div>
+
+        <button type="button" class="btn-primary" style="width:100%;padding:12px;font-weight:700;font-size:14px;border-radius:12px;" onclick="submitGlobalPasswordReset()">
+          🔒 Apply Password Reset
+        </button>
+      </div>
+    </div>
+  `;
+
+  showModal('🔑 Secure Password Reset', modalHtml);
+
+  if (selectedUserId) {
+    try {
+      const res = await apiFetch(`/users/${selectedUserId}`);
+      if (res.success && res.data) {
+        selectPasswordResetTarget(res.data);
+      }
+    } catch (e) {}
+  }
+}
+
+const debounceSearchResetUsers = debounce(async (query) => {
+  const dropdown = document.getElementById('resetSearchResultsDropdown');
+  if (!dropdown) return;
+
+  if (!query || query.trim().length < 1) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/users/reset-password/search?search=${encodeURIComponent(query.trim())}`);
+    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+      dropdown.innerHTML = res.data.map(u => `
+        <div onclick="selectPasswordResetTarget(${JSON.stringify(u).replace(/"/g, '&quot;')})" style="padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background 0.15s ease;">
+          <div>
+            <div style="font-weight:700;font-size:13px;color:var(--text-primary);">${u.name} (@${u.username})</div>
+            <div style="font-size:11px;color:var(--text-muted);">${u.email || u.phone || 'No contact'} · ${u.shop_name || 'Branch HQ'}</div>
+          </div>
+          <span class="badge ${u.role === 'Admin' ? 'badge-paid' : 'badge-partial'}" style="font-size:10px;">${u.role}</span>
+        </div>
+      `).join('');
+      dropdown.style.display = 'block';
+    } else {
+      dropdown.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No matching users found</div>`;
+      dropdown.style.display = 'block';
+    }
+  } catch (e) {
+    dropdown.style.display = 'none';
+  }
+}, 300);
+
+function selectPasswordResetTarget(user) {
+  _selectedResetUser = user;
+
+  const dropdown = document.getElementById('resetSearchResultsDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+
+  const previewBox = document.getElementById('resetSelectedUserPreview');
+  const controlsBox = document.getElementById('resetPasswordFormControls');
+
+  document.getElementById('resetPreviewName').textContent = user.name || user.username;
+  document.getElementById('resetPreviewUsername').textContent = `@${user.username} (ID: ${user.id})`;
+  document.getElementById('resetPreviewScope').textContent = `Org: ${user.organization_name || user.organization_id || 'Platform'} · Branch: ${user.shop_name || user.shop_id || 'HQ'}`;
+  
+  const badge = document.getElementById('resetPreviewRoleBadge');
+  badge.textContent = user.role;
+  badge.className = `badge ${user.role === 'Admin' ? 'badge-paid' : user.role === 'Owner' ? 'badge-pending' : 'badge-partial'}`;
+
+  const lastInfo = document.getElementById('resetPreviewLastInfo');
+  const lastDate = user.last_password_reset_at ? formatDateFull(user.last_password_reset_at) : 'Never';
+  const lastBy = user.last_password_reset_by ? ` (by ${user.last_password_reset_by})` : '';
+  lastInfo.textContent = `Last Password Reset: ${lastDate}${lastBy}`;
+
+  if (previewBox) previewBox.style.display = 'block';
+  if (controlsBox) controlsBox.style.display = 'block';
+}
+
+function generateTempPasswordForReset() {
+  const tempPass = 'Pass-' + Math.floor(1000 + Math.random() * 9000);
+  const input = document.getElementById('resetNewPasswordInput');
+  const copyBtn = document.getElementById('btnCopyResetPass');
+
+  if (input) {
+    input.type = 'text';
+    input.value = tempPass;
+    updatePasswordStrengthMeter(tempPass);
+  }
+  if (copyBtn) copyBtn.style.display = 'inline-flex';
+}
+
+function toggleResetPassVisibility() {
+  const input = document.getElementById('resetNewPasswordInput');
+  const btn = document.getElementById('btnToggleResetVis');
+  if (!input) return;
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  if (btn) btn.textContent = isPass ? '🙈' : '👁';
+}
+
+function updatePasswordStrengthMeter(val) {
+  const textEl = document.getElementById('resetPassStrengthText');
+  if (!textEl) return;
+  if (!val) {
+    textEl.textContent = 'None';
+    textEl.style.color = 'var(--text-muted)';
+    return;
+  }
+  if (val.length < 6) {
+    textEl.textContent = 'Weak (min 6 chars)';
+    textEl.style.color = '#ef4444';
+  } else if (val.length >= 8 && /[A-Z]/.test(val) && /[0-9]/.test(val)) {
+    textEl.textContent = 'Strong 💪';
+    textEl.style.color = '#10b981';
+  } else {
+    textEl.textContent = 'Medium 👍';
+    textEl.style.color = '#f59e0b';
+  }
+}
+
+function copyTempPasswordToClipboard() {
+  const input = document.getElementById('resetNewPasswordInput');
+  if (!input || !input.value) return;
+  navigator.clipboard.writeText(input.value);
+  showToast('Copied!', 'Temporary password copied to clipboard', 'success');
+}
+
+async function submitGlobalPasswordReset() {
+  if (!_selectedResetUser) {
+    showToast('Selection Required', 'Please select a user to reset password', 'warning');
+    return;
+  }
+
+  const input = document.getElementById('resetNewPasswordInput');
+  const forceCheck = document.getElementById('resetForceChangeCheckbox');
+  const newPassword = input ? input.value.trim() : '';
+  const forceChangeNextLogin = forceCheck ? forceCheck.checked : true;
+
+  if (!newPassword || newPassword.length < 6) {
+    showToast('Validation Error', 'Password must be at least 6 characters long', 'warning');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to reset password for ${_selectedResetUser.name} (@${_selectedResetUser.username})?`)) {
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/users/${_selectedResetUser.id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({
+        newPassword,
+        forceChangeNextLogin
+      })
+    });
+
+    if (res.success) {
+      closeModal();
+      showToast('Password Reset Complete', `Successfully reset password for ${_selectedResetUser.name}`, 'success');
+
+      // Confirmation Result Modal
+      const confirmHtml = `
+        <div style="padding:12px;text-align:center;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <h3 style="margin-bottom:8px;">Password Reset Successfully</h3>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">User <strong>${_selectedResetUser.name}</strong> (@${_selectedResetUser.username}) password has been updated.</p>
+
+          <div style="background:var(--bg-secondary, #f1f5f9);padding:12px;border-radius:12px;margin-bottom:16px;word-break:break-all;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">New Credentials:</div>
+            <div style="font-weight:800;font-size:18px;color:var(--ios-blue);font-family:monospace;">${newPassword}</div>
+          </div>
+
+          <button class="btn-primary" style="width:100%;padding:10px;" onclick="navigator.clipboard.writeText('${newPassword}');closeModal();showToast('Copied', 'Password copied!', 'success');">
+            📋 Copy New Password & Close
+          </button>
+        </div>
+      `;
+      showModal('Password Reset Details', confirmHtml);
+    } else {
+      showToast('Reset Failed', res.message || 'Failed to reset password', 'error');
+    }
+  } catch (e) {
+    showToast('Reset Error', e.message, 'error');
+  }
+}
+
+function checkAndTriggerForcedPasswordChange() {
+  if (currentUser && (currentUser.force_password_change === 1 || currentUser.force_password_change === true)) {
+    openForcedPasswordChangeModal();
+  }
+}
+
+function openForcedPasswordChangeModal() {
+  const modalHtml = `
+    <div style="padding:4px;">
+      <div style="background:rgba(239,68,68,0.1);border-left:4px solid #ef4444;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:var(--text-primary);">
+        ⚠️ <strong>Security Action Required:</strong> Your password was reset by an Administrator. You must set a new password before continuing.
+      </div>
+
+      <form onsubmit="submitForcedPasswordChange(event)">
+        <div style="margin-bottom:12px;">
+          <label class="form-label" style="font-weight:700;">New Password</label>
+          <input type="password" id="forcedNewPassword" class="form-control" required minlength="6" placeholder="Enter new password (min 6 chars)">
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label class="form-label" style="font-weight:700;">Confirm New Password</label>
+          <input type="password" id="forcedConfirmPassword" class="form-control" required minlength="6" placeholder="Re-enter new password">
+        </div>
+
+        <button type="submit" class="btn-primary" style="width:100%;padding:12px;font-weight:700;font-size:14px;border-radius:12px;">
+          🔒 Set New Password & Proceed
+        </button>
+      </form>
+    </div>
+  `;
+
+  showModal('🔐 Update Your Password', modalHtml, false);
+}
+
+async function submitForcedPasswordChange(e) {
+  e.preventDefault();
+  const newPass = document.getElementById('forcedNewPassword')?.value.trim();
+  const confirmPass = document.getElementById('forcedConfirmPassword')?.value.trim();
+
+  if (!newPass || newPass.length < 6) {
+    showToast('Validation Error', 'Password must be at least 6 characters long', 'warning');
+    return;
+  }
+
+  if (newPass !== confirmPass) {
+    showToast('Validation Error', 'Passwords do not match', 'warning');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/auth/change-password-forced', {
+      method: 'POST',
+      body: JSON.stringify({ newPassword: newPass })
+    });
+
+    if (res.success) {
+      if (currentUser) currentUser.force_password_change = 0;
+      closeModal();
+      showToast('Password Updated', 'Your password has been updated successfully!', 'success');
+    } else {
+      showToast('Error', res.message || 'Failed to update password', 'error');
+    }
+  } catch (err) {
+    showToast('Error', err.message, 'error');
+  }
+}
+
+let subSearchQuery = '';
+let subStatusFilter = 'All';
+let subPaymentStatusFilter = 'All';
+
+async function renderAdminSubscriptionsSection(c) {
+  c.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">⏳ Loading Subscription Dashboard & Records...</div>`;
+
+  try {
+    const [statsRes, listRes] = await Promise.all([
+      apiFetch('/subscriptions/stats'),
+      apiFetch(`/subscriptions?search=${encodeURIComponent(subSearchQuery)}&status=${encodeURIComponent(subStatusFilter === 'All' ? '' : subStatusFilter)}&payment_status=${encodeURIComponent(subPaymentStatusFilter === 'All' ? '' : subPaymentStatusFilter)}`)
+    ]);
+
+    const stats = (statsRes && statsRes.success) ? statsRes.data : {
+      totalOrganizations: 0, totalBranches: 0, activeSubscriptions: 0, expiredSubscriptions: 0, pendingPayments: 0, renewalsDue: 0, monthlyRevenue: 0
+    };
+
+    const subscriptions = (listRes && listRes.success) ? listRes.data : [];
+
+    c.innerHTML = `
+      <div class="fade-in">
+        <!-- 1. Subscription Dashboard KPI Summary -->
+        <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;margin-bottom:14px;">
+          <div class="kpi-card" style="border-left:4px solid var(--ios-blue);">
+            <div class="kpi-label">TOTAL ORGANIZATIONS</div>
+            <div class="kpi-value">${stats.totalOrganizations}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Across ${stats.totalBranches} Active Branch(es)</div>
+          </div>
+          <div class="kpi-card" style="border-left:4px solid var(--ios-green);">
+            <div class="kpi-label">MONTHLY REVENUE</div>
+            <div class="kpi-value">${state.shop.currency}${fmtNum(stats.monthlyRevenue, 0)}</div>
+            <div style="font-size:11px;color:var(--ios-green);margin-top:2px;">Paid Subscriptions</div>
+          </div>
+          <div class="kpi-card" style="border-left:4px solid var(--ios-orange);">
+            <div class="kpi-label">PENDING PAYMENTS</div>
+            <div class="kpi-value" style="color:var(--ios-red);">${stats.pendingPayments}</div>
+            <div style="font-size:11px;color:var(--ios-red);margin-top:2px;">Unpaid Status</div>
+          </div>
+          <div class="kpi-card" style="border-left:4px solid #8E8E93;">
+            <div class="kpi-label">RENEWALS DUE</div>
+            <div class="kpi-value">${stats.renewalsDue}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Next 10 Days</div>
+          </div>
+        </div>
+
+        <!-- 2. Search & Filters Bar -->
+        <div class="search-box" style="margin-bottom:10px;">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Search by Org, Branch, Owner, Sub ID..." value="${subSearchQuery}" oninput="subSearchQuery=this.value;renderAdminSubscriptionsSection(document.getElementById('mainContent'))">
+        </div>
+
+        <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;" class="time-pill-bar">
+          <button class="time-pill ${subStatusFilter === 'All' ? 'active' : ''}" onclick="subStatusFilter='All';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">All Status</button>
+          <button class="time-pill ${subStatusFilter === 'Active' ? 'active' : ''}" onclick="subStatusFilter='Active';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">🟢 Active</button>
+          <button class="time-pill ${subStatusFilter === 'Expiring Soon' ? 'active' : ''}" onclick="subStatusFilter='Expiring Soon';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">🟠 Expiring Soon</button>
+          <button class="time-pill ${subStatusFilter === 'Expired' ? 'active' : ''}" onclick="subStatusFilter='Expired';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">🔴 Expired</button>
+          <button class="time-pill ${subStatusFilter === 'Renewal Due' ? 'active' : ''}" onclick="subStatusFilter='Renewal Due';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">⚡ Renewal Due</button>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-bottom:14px;">
+          <button class="btn-sm ${subPaymentStatusFilter === 'All' ? 'btn-primary' : 'btn-secondary'}" style="flex:1;" onclick="subPaymentStatusFilter='All';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">All Payments</button>
+          <button class="btn-sm ${subPaymentStatusFilter === 'Paid' ? 'btn-primary' : 'btn-secondary'}" style="flex:1;" onclick="subPaymentStatusFilter='Paid';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">✅ Paid Only</button>
+          <button class="btn-sm ${subPaymentStatusFilter === 'Unpaid' ? 'btn-primary' : 'btn-secondary'}" style="flex:1;" onclick="subPaymentStatusFilter='Unpaid';renderAdminSubscriptionsSection(document.getElementById('mainContent'))">⚠️ Unpaid Only</button>
+        </div>
+
+        <!-- 3. Subscriptions List -->
+        ${subscriptions.length === 0 ? '<div class="empty-state"><div class="empty-state-icon">💳</div><p>No subscription records match the selected filters.</p></div>' :
+          subscriptions.map(sub => {
+            const isPaid = sub.payment_status === 'Paid';
+            const statusBadgeClass = sub.calculated_status === 'Active' ? 'badge-paid' : sub.calculated_status === 'Expiring Soon' ? 'badge-partial' : 'badge-unpaid';
+            const daysText = sub.days_remaining > 0 ? `${sub.days_remaining} day${sub.days_remaining > 1 ? 's' : ''} left` : 'EXPIRED';
+
+            return `
+              <div class="card" style="margin-bottom:12px;padding:14px;border:1px solid var(--border);">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                  <div>
+                    <div style="font-size:15px;font-weight:800;color:var(--text);">${sub.organization_name || 'Organization'}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Branch: <strong>${sub.branch_name || 'Main HQ'}</strong> · Owner: ${sub.owner_name || 'N/A'}</div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">ID: <code>${sub.subscription_id}</code></div>
+                  </div>
+                  <div style="text-align:right;">
+                    <span class="badge ${statusBadgeClass}">${sub.calculated_status.toUpperCase()}</span>
+                    <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-top:4px;">${daysText}</div>
+                  </div>
+                </div>
+
+                <div style="background:var(--bg-secondary, #f8fafc);padding:10px;border-radius:10px;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                  <div>Plan: <strong>${sub.plan_name || 'Monthly Plan'}</strong></div>
+                  <div>Amount: <strong>${state.shop.currency}${fmtNum(sub.subscription_amount || 999, 2)}</strong></div>
+                  <div>Start: <strong>${formatDate(sub.subscription_start)}</strong></div>
+                  <div>Expiry: <strong>${formatDate(sub.expiry_date)}</strong></div>
+                </div>
+
+                <!-- Interactive Payment Status Toggle & Mode Select -->
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border-light);border-bottom:1px solid var(--border-light);margin-bottom:10px;">
+                  <div style="font-size:13px;font-weight:700;">Payment Status:</div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:12px;font-weight:700;color:${isPaid ? 'var(--ios-green)' : 'var(--ios-red)'};">${sub.payment_status}</span>
+                    <label class="switch" style="position:relative;display:inline-block;width:44px;height:24px;">
+                      <input type="checkbox" ${isPaid ? 'checked' : ''} onchange="toggleSubscriptionPaymentStatus('${sub.id}', this.checked)">
+                      <span class="slider round" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:${isPaid ? '#34C759' : '#FF3B30'};transition:.4s;border-radius:24px;"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+                  <div style="font-size:12px;font-weight:700;white-space:nowrap;">Payment Mode:</div>
+                  <select style="flex:1;padding:6px;font-size:12px;border-radius:8px;border:1px solid var(--border);" onchange="updateSubscriptionPaymentMode('${sub.id}', this.value)">
+                    ${['Cash', 'UPI', 'Bank Transfer', 'Credit Card', 'Debit Card', 'Net Banking', 'Other'].map(m => `<option value="${m}" ${sub.payment_mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+                  </select>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+                  <button class="btn-sm btn-primary" onclick="openRenewSubscriptionModal('${sub.id}', '${(sub.organization_name || 'Org').replace(/'/g, "\\'")}')">🔄 Renew</button>
+                  <button class="btn-sm btn-secondary" onclick="openExtendExpiryModal('${sub.id}', '${sub.expiry_date}')">⏳ Extend</button>
+                  <button class="btn-sm btn-secondary" onclick="openChangePlanModal('${sub.id}', '${sub.plan_id}')">✏ Plan</button>
+                </div>
+                <button class="btn-sm btn-secondary" style="width:100%;padding:8px;" onclick="openA4SubscriptionInvoicePrint('${sub.id}')">🧾 Generate A4 SaaS Tax Invoice</button>
+              </div>
+            `;
+          }).join('')
+        }
+      </div>
+    `;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load subscriptions: ${err.message}</div>`;
+  }
+}
+
+async function toggleSubscriptionPaymentStatus(subId, isChecked) {
+  const newStatus = isChecked ? 'Paid' : 'Unpaid';
+  try {
+    const res = await apiFetch(`/subscriptions/${subId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ payment_status: newStatus })
+    });
+    if (res.success) {
+      toast(`✅ Subscription payment status updated to ${newStatus}`);
+      renderAdminSubscriptionsSection(document.getElementById('mainContent'));
+    }
+  } catch (e) {
+    alert(e.message || 'Failed to update payment status');
+    renderAdminSubscriptionsSection(document.getElementById('mainContent'));
+  }
+}
+
+async function updateSubscriptionPaymentMode(subId, mode) {
+  try {
+    const res = await apiFetch(`/subscriptions/${subId}/payment-mode`, {
+      method: 'PUT',
+      body: JSON.stringify({ payment_mode: mode })
+    });
+    if (res.success) {
+      toast(`✅ Payment mode updated to ${mode}`);
+    }
+  } catch (e) {
+    alert(e.message || 'Failed to update payment mode');
+  }
+}
+
+function openRenewSubscriptionModal(subId, orgName) {
+  showModal(`🔄 Renew Subscription — ${orgName}`, `
+    <div class="fade-in">
+      <div class="form-group">
+        <label class="form-label">Select Renewal Subscription Plan *</label>
+        <select id="renewPlanSelect" style="padding:10px;border-radius:10px;font-weight:600;">
+          <option value="monthly" selected>Monthly Plan — ₹999 / month</option>
+          <option value="quarterly">Quarterly Plan — ₹2,699 / 3 months</option>
+          <option value="half_yearly">Half-Yearly Plan — ₹4,999 / 6 months</option>
+          <option value="yearly">Yearly Plan — ₹8,999 / 12 months</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Payment Mode *</label>
+        <select id="renewPayMode" style="padding:10px;border-radius:10px;font-weight:600;">
+          <option value="Cash">💵 Cash</option>
+          <option value="UPI">📱 UPI / QR Code</option>
+          <option value="Bank Transfer">🏦 Bank Transfer</option>
+          <option value="Credit Card">💳 Credit Card</option>
+          <option value="Debit Card">💳 Debit Card</option>
+          <option value="Net Banking">🌐 Net Banking</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:14px;" onclick="submitRenewSubscription('${subId}')">✅ Confirm & Process Renewal</button>
+    </div>
+  `);
+}
+
+async function submitRenewSubscription(subId) {
+  const plan_id = document.getElementById('renewPlanSelect').value;
+  const payment_mode = document.getElementById('renewPayMode').value;
+
+  try {
+    const res = await apiFetch(`/subscriptions/${subId}/renew`, {
+      method: 'POST',
+      body: JSON.stringify({ plan_id, payment_mode })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast('🎉 Subscription renewed successfully!');
+      renderAdminSubscriptionsSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to renew subscription');
+  }
+}
+
+function openExtendExpiryModal(subId, currentExpiry) {
+  showModal('⏳ Extend Subscription Expiry', `
+    <div class="fade-in">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Current Expiry: <strong>${formatDate(currentExpiry)}</strong></div>
+      <div class="form-group">
+        <label class="form-label">Number of Days to Extend *</label>
+        <input type="number" id="extendDaysInput" value="30" min="1" max="365" style="font-size:18px;font-weight:800;">
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:14px;" onclick="submitExtendExpiry('${subId}')">✅ Extend Expiry Date</button>
+    </div>
+  `);
+}
+
+async function submitExtendExpiry(subId) {
+  const days = parseInt(document.getElementById('extendDaysInput').value) || 30;
+
+  try {
+    const res = await apiFetch(`/subscriptions/${subId}/extend`, {
+      method: 'POST',
+      body: JSON.stringify({ days })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast(`✅ Expiry extended by ${days} days`);
+      renderAdminSubscriptionsSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to extend expiry');
+  }
+}
+
+function openChangePlanModal(subId, currentPlan) {
+  showModal('✏ Change Subscription Plan', `
+    <div class="fade-in">
+      <div class="form-group">
+        <label class="form-label">Plan Name *</label>
+        <input type="text" id="cpPlanName" value="Custom Enterprise Plan">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subscription Price / Branch (₹) *</label>
+        <input type="number" id="cpPrice" value="999" step="1">
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:14px;" onclick="submitChangePlan('${subId}')">✅ Save Plan Changes</button>
+    </div>
+  `);
+}
+
+async function submitChangePlan(subId) {
+  const plan_name = document.getElementById('cpPlanName').value.trim();
+  const subscription_amount = parseFloat(document.getElementById('cpPrice').value) || 999;
+
+  try {
+    const res = await apiFetch(`/subscriptions/${subId}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify({ plan_name, subscription_amount })
+    });
+
+    if (res.success) {
+      closeModal();
+      toast('✅ Subscription plan updated');
+      renderAdminSubscriptionsSection(document.getElementById('mainContent'));
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to update plan');
+  }
+}
+
+let activeGlobalSettingsTab = 'company';
+
+async function renderGlobalSaaSConfigurationCenter(c) {
+  try {
+    const res = await apiFetch('/settings/global');
+    const gs = (res && res.success) ? res.data : {};
+
+    c.innerHTML = `
+    <div class="fade-in">
+      <div class="card" style="background:linear-gradient(135deg, rgba(30,30,30,0.06), rgba(59,130,246,0.06));border:1px solid var(--border);">
+        <h3 style="margin-bottom:4px;color:var(--text);">⚙️ Global SaaS Configuration Center</h3>
+        <div style="font-size:12px;color:var(--text-muted);">Single Source of Truth — Manage Company Info, SaaS Billing & Invoices, Support Contacts, Branding, and Security.</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;" class="time-pill-bar">
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'company' ? 'active' : ''}" onclick="activeGlobalSettingsTab='company';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">🏢 Company Info</button>
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'billing' ? 'active' : ''}" onclick="activeGlobalSettingsTab='billing';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">💳 SaaS Billing & Invoices</button>
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'support' ? 'active' : ''}" onclick="activeGlobalSettingsTab='support';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">📞 Support & Contact</button>
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'branding' ? 'active' : ''}" onclick="activeGlobalSettingsTab='branding';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">🎨 Branding</button>
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'system' ? 'active' : ''}" onclick="activeGlobalSettingsTab='system';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">🌐 System & Preferences</button>
+        <button type="button" class="time-pill ${activeGlobalSettingsTab === 'security' ? 'active' : ''}" onclick="activeGlobalSettingsTab='security';renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'))">🔒 Security Rules</button>
+      </div>
+
+      <form id="globalSettingsForm" onsubmit="submitGlobalSaaSConfig(event)">
+        ${renderGlobalTabContent(gs)}
+
+        <div style="position:sticky;bottom:76px;z-index:90;background:var(--card-bg, #ffffff);padding:12px;border:1px solid var(--border);border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:16px;">
+          <button type="submit" class="btn-primary" style="width:100%;padding:14px;font-size:16px;">💾 Save SaaS Configuration</button>
+        </div>
+      </form>
+    </div>`;
+  } catch (err) {
+    c.innerHTML = `<div class="alert alert-warn">Failed to load Global SaaS Configuration: ${err.message}</div>`;
+  }
+}
+
+function renderGlobalTabContent(gs) {
+  if (activeGlobalSettingsTab === 'company') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">🏢 SaaS Company Information</h3>
+        <div class="form-group">
+          <label class="form-label">Company Brand Name *</label>
+          <input type="text" id="gsCompanyBrand" value="${gs.company_name || 'STORE MANAGEMENT SYSTEMS'}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Legal Business Name *</label>
+          <input type="text" id="gsLegalName" value="${gs.legal_name || 'Store Management Systems Pvt. Ltd.'}" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">GSTIN Number</label>
+            <input type="text" id="gsGstin" value="${gs.gstin || '22AAAAA0000A1Z5'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">PAN Number</label>
+            <input type="text" id="gsPan" value="${gs.pan || 'ABCDE1234F'}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CIN (Corporate ID)</label>
+          <input type="text" id="gsCin" value="${gs.cin || 'U72900DL2024PTC123456'}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Registered Office Address</label>
+          <textarea id="gsRegAddress" rows="2">${gs.registered_address || 'Suite 500, Tech Park Plaza, Barakhamba Road'}</textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input type="text" id="gsCity" value="${gs.city || 'New Delhi'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">State</label>
+            <input type="text" id="gsState" value="${gs.state || 'Delhi'}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <input type="text" id="gsCountry" value="${gs.country || 'India'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Pincode</label>
+            <input type="text" id="gsPincode" value="${gs.pincode || '110001'}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Website URL</label>
+            <input type="url" id="gsWebsite" value="${gs.website || 'https://storemanagementsystems.com'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Company Email</label>
+            <input type="email" id="gsCompanyEmail" value="${gs.company_email || 'contact@storemanagementsystems.com'}">
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (activeGlobalSettingsTab === 'billing') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">💳 SaaS Billing & A4 Tax Invoice Settings</h3>
+        <div class="form-group">
+          <label class="form-label">Billing Entity Name *</label>
+          <input type="text" id="gsBillingCompanyName" value="${gs.billing_company_name || 'Store Management Systems SaaS Billing'}" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Billing GSTIN</label>
+            <input type="text" id="gsBillingGstin" value="${gs.billing_gstin || '22AAAAA0000A1Z5'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Invoice Prefix</label>
+            <input type="text" id="gsInvoicePrefix" value="${gs.invoice_prefix || 'SMS-INV-'}">
+          </div>
+        </div>
+
+        <h4 style="margin:14px 0 8px;font-size:13px;color:var(--ios-blue);">🏦 Bank & Payment Gateway Details</h4>
+        <div class="form-group">
+          <label class="form-label">Bank Name</label>
+          <input type="text" id="gsBankName" value="${gs.bank_name || 'HDFC Bank Ltd'}">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Account Holder Name</label>
+            <input type="text" id="gsAccountHolder" value="${gs.account_holder || 'Store Management Systems Pvt. Ltd.'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Account Number</label>
+            <input type="text" id="gsAccountNumber" value="${gs.account_number || '50200012345678'}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">IFSC Code</label>
+            <input type="text" id="gsIfscCode" value="${gs.ifsc_code || 'HDFC0001234'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">UPI ID</label>
+            <input type="text" id="gsUpiId" value="${gs.upi_id || 'sms@hdfcbank'}">
+          </div>
+        </div>
+
+        <h4 style="margin:14px 0 8px;font-size:13px;color:var(--ios-blue);">✍ Signatory & Terms</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Authorized Signatory Name</label>
+            <input type="text" id="gsSignatoryName" value="${gs.signatory_name || 'Rahul Sharma'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Designation</label>
+            <input type="text" id="gsSignatoryDesignation" value="${gs.signatory_designation || 'Director & Head of SaaS Operations'}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Invoice Notes & Legal Terms</label>
+          <textarea id="gsNotesTerms" rows="2">${gs.notes_terms || 'Computer generated SaaS invoice. All disputes subject to Delhi jurisdiction.'}</textarea>
+        </div>
+      </div>
+    `;
+  } else if (activeGlobalSettingsTab === 'support') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">📞 Customer Support & Contact Channels</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Primary Support Email *</label>
+            <input type="email" id="gsSupportEmail" value="${gs.support_email || 'support@storemanagementsystems.com'}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Support Phone Hotline *</label>
+            <input type="tel" id="gsSupportPhone" value="${gs.support_phone || '+1-800-SMS-SaaS'}" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">WhatsApp Support Hotline</label>
+            <input type="tel" id="gsWhatsapp" value="${gs.whatsapp_number || '+91-9876543210'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Toll-Free Customer Care</label>
+            <input type="tel" id="gsCustomerCare" value="${gs.customer_care_number || '1800-123-4567'}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Sales Email</label>
+            <input type="email" id="gsSalesEmail" value="${gs.sales_email || 'sales@storemanagementsystems.com'}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sales Phone</label>
+            <input type="tel" id="gsSalesPhone" value="${gs.sales_phone || '+91-9876543212'}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Support Business Hours</label>
+          <input type="text" id="gsBusinessHours" value="${gs.business_hours || 'Mon - Sat: 9:00 AM - 8:00 PM IST'}">
+        </div>
+      </div>
+    `;
+  } else if (activeGlobalSettingsTab === 'branding') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">🎨 SaaS Brand Identity & Assets</h3>
+        <div class="form-group" style="text-align:center;">
+          <label class="form-label">App & Invoice Logo</label>
+          <div class="logo-upload" onclick="document.getElementById('gsLogoFile').click()">
+            ${gs.light_logo ? `<img src="${gs.light_logo}" class="logo-preview" alt="logo">` : `<div style="font-size:36px;">SMS</div>`}
+            <div style="font-size:12px;color:var(--text-muted);">Tap to upload SaaS brand logo</div>
+          </div>
+          <input type="file" id="gsLogoFile" accept="image/*" style="display:none;" onchange="uploadGlobalLogo(this)">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Primary Color</label>
+            <input type="color" id="gsPrimaryColor" value="${gs.primary_color || '#1E1E1E'}" style="height:44px;padding:2px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Accent Color</label>
+            <input type="color" id="gsAccentColor" value="${gs.accent_color || '#3B82F6'}" style="height:44px;padding:2px;">
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (activeGlobalSettingsTab === 'system') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">🌐 System Preferences & Localization</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Default Currency Symbol</label>
+            <select id="gsDefaultCurrency">
+              ${['₹', '$', '€', '£', '¥', '₵'].map(c => `<option ${(gs.default_currency || '₹') === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Default Price / Branch (₹)</label>
+            <input type="number" id="gsDefaultPrice" value="${gs.default_price_per_branch || 999}">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Date Format</label>
+            <select id="gsDateFormat">
+              <option value="DD/MM/YYYY" ${(gs.date_format || 'DD/MM/YYYY') === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY (Indian / UK)</option>
+              <option value="YYYY-MM-DD" ${gs.date_format === 'YYYY-MM-DD' ? 'selected' : ''}>YYYY-MM-DD (ISO)</option>
+              <option value="MM/DD/YYYY" ${gs.date_format === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY (US)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Time Zone</label>
+            <input type="text" id="gsTimeZone" value="${gs.time_zone || 'Asia/Kolkata'}">
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (activeGlobalSettingsTab === 'security') {
+    return `
+      <div class="card">
+        <h3 style="margin-bottom:14px;">🔒 Security & Password Rules</h3>
+        <div class="form-group">
+          <label class="form-label">Session Inactivity Timeout (Minutes)</label>
+          <input type="number" id="gsSessionTimeout" value="${gs.session_timeout_minutes || 15}" min="1" max="1440">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Minimum Password Length</label>
+            <input type="number" id="gsMinPassLen" value="${gs.password_min_length || 6}" min="6" max="32">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max Login Attempts</label>
+            <input type="number" id="gsMaxAttempts" value="${gs.max_login_attempts || 5}" min="3" max="10">
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border:1px solid rgba(255, 59, 48, 0.3);background:rgba(255, 59, 48, 0.03);">
+        <h3 style="color:var(--ios-red);margin-bottom:12px;">🚨 System Backups & Disaster Recovery</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button type="button" class="btn-secondary" style="padding:12px;" onclick="downloadBackup()">💾 Backup Database</button>
+          <button type="button" class="btn-secondary" style="padding:12px;" onclick="openRestoreModal()">📥 Restore Database</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function submitGlobalSaaSConfig(e) {
+  e.preventDefault();
+  let payload = {};
+
+  if (activeGlobalSettingsTab === 'company') {
+    payload = {
+      company_name: document.getElementById('gsCompanyBrand')?.value.trim(),
+      legal_name: document.getElementById('gsLegalName')?.value.trim(),
+      gstin: document.getElementById('gsGstin')?.value.trim(),
+      pan: document.getElementById('gsPan')?.value.trim(),
+      cin: document.getElementById('gsCin')?.value.trim(),
+      registered_address: document.getElementById('gsRegAddress')?.value.trim(),
+      city: document.getElementById('gsCity')?.value.trim(),
+      state: document.getElementById('gsState')?.value.trim(),
+      country: document.getElementById('gsCountry')?.value.trim(),
+      pincode: document.getElementById('gsPincode')?.value.trim(),
+      website: document.getElementById('gsWebsite')?.value.trim(),
+      company_email: document.getElementById('gsCompanyEmail')?.value.trim(),
+    };
+  } else if (activeGlobalSettingsTab === 'billing') {
+    payload = {
+      billing_company_name: document.getElementById('gsBillingCompanyName')?.value.trim(),
+      billing_gstin: document.getElementById('gsBillingGstin')?.value.trim(),
+      invoice_prefix: document.getElementById('gsInvoicePrefix')?.value.trim(),
+      bank_name: document.getElementById('gsBankName')?.value.trim(),
+      account_holder: document.getElementById('gsAccountHolder')?.value.trim(),
+      account_number: document.getElementById('gsAccountNumber')?.value.trim(),
+      ifsc_code: document.getElementById('gsIfscCode')?.value.trim(),
+      upi_id: document.getElementById('gsUpiId')?.value.trim(),
+      signatory_name: document.getElementById('gsSignatoryName')?.value.trim(),
+      signatory_designation: document.getElementById('gsSignatoryDesignation')?.value.trim(),
+      notes_terms: document.getElementById('gsNotesTerms')?.value.trim(),
+    };
+  } else if (activeGlobalSettingsTab === 'support') {
+    payload = {
+      support_email: document.getElementById('gsSupportEmail')?.value.trim(),
+      support_phone: document.getElementById('gsSupportPhone')?.value.trim(),
+      whatsapp_number: document.getElementById('gsWhatsapp')?.value.trim(),
+      customer_care_number: document.getElementById('gsCustomerCare')?.value.trim(),
+      sales_email: document.getElementById('gsSalesEmail')?.value.trim(),
+      sales_phone: document.getElementById('gsSalesPhone')?.value.trim(),
+      business_hours: document.getElementById('gsBusinessHours')?.value.trim(),
+    };
+  } else if (activeGlobalSettingsTab === 'branding') {
+    payload = {
+      primary_color: document.getElementById('gsPrimaryColor')?.value,
+      accent_color: document.getElementById('gsAccentColor')?.value,
+    };
+  } else if (activeGlobalSettingsTab === 'system') {
+    payload = {
+      default_currency: document.getElementById('gsDefaultCurrency')?.value,
+      default_price_per_branch: parseFloat(document.getElementById('gsDefaultPrice')?.value) || 999,
+      date_format: document.getElementById('gsDateFormat')?.value,
+      time_zone: document.getElementById('gsTimeZone')?.value.trim(),
+    };
+  } else if (activeGlobalSettingsTab === 'security') {
+    payload = {
+      session_timeout_minutes: parseInt(document.getElementById('gsSessionTimeout')?.value) || 15,
+      password_min_length: parseInt(document.getElementById('gsMinPassLen')?.value) || 6,
+      max_login_attempts: parseInt(document.getElementById('gsMaxAttempts')?.value) || 5,
+    };
+  }
+
+  try {
+    const res = await apiFetch('/settings/global', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+    if (res.success) {
+      toast('✅ Global SaaS Configuration saved and synchronized!');
+    }
+  } catch (err) {
+    alert(err.message || 'Failed to save global settings');
+  }
+}
+
+function uploadGlobalLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      await apiFetch('/settings/global', {
+        method: 'PUT',
+        body: JSON.stringify({ light_logo: e.target.result, dark_logo: e.target.result })
+      });
+      toast('✅ Brand logo updated globally');
+      renderGlobalSaaSConfigurationCenter(document.getElementById('mainContent'));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function openA4SubscriptionInvoicePrint(subId) {
+  try {
+    const [subRes, gsRes] = await Promise.all([
+      apiFetch(`/subscriptions/${subId}`),
+      apiFetch('/settings/global')
+    ]);
+
+    if (!subRes.success || !subRes.data) { alert('Subscription record not found'); return; }
+
+    const sub = subRes.data;
+    const gs = (gsRes && gsRes.success) ? gsRes.data : {};
+    const dt = new Date(sub.created_at || Date.now());
+    const dateStr = dt.toLocaleDateString('en-IN');
+    const invNo = `${gs.invoice_prefix || 'SMS-INV-'}${sub.subscription_id}`;
+
+    const a4Html = `
+      <div class="a4-invoice">
+        <div class="a4-header">
+          <div class="a4-brand">
+            ${gs.light_logo ? `<img src="${gs.light_logo}" style="max-height:45px;margin-bottom:6px;" alt="Logo">` : ''}
+            <h1>${(gs.billing_company_name || 'STORE MANAGEMENT SYSTEMS').toUpperCase()}</h1>
+            <p style="font-weight:600;color:#475569;">${gs.billing_legal_name || 'Store Management Systems Pvt. Ltd.'}</p>
+            <p>${gs.billing_address || 'Suite 500, Tech Park Plaza'}, ${gs.billing_city || 'New Delhi'}, ${gs.billing_state || 'Delhi'} - ${gs.billing_pincode || '110001'}</p>
+            <p>Phone: ${gs.billing_phone || 'N/A'} | Email: ${gs.billing_email || 'billing@sms.com'}</p>
+            <p><strong>GSTIN: ${gs.billing_gstin || '22AAAAA0000A1Z5'} | PAN: ${gs.billing_pan || 'ABCDE1234F'}</strong></p>
+          </div>
+          <div class="a4-meta">
+            <h2>SAAS TAX INVOICE</h2>
+            <p><strong>Invoice No:</strong> ${invNo}</p>
+            <p><strong>Invoice Date:</strong> ${dateStr}</p>
+            <p><strong>Payment Status:</strong> <span style="color:${sub.payment_status === 'Paid' ? '#10b981' : '#ef4444'};">${sub.payment_status}</span></p>
+            <p><strong>Payment Mode:</strong> ${sub.payment_mode || 'Cash'}</p>
+          </div>
+        </div>
+
+        <div class="a4-info-grid">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">BILLED TO CLIENT:</div>
+            <div style="font-size:15px;font-weight:800;color:#0f172a;margin-top:2px;">${sub.organization_name || 'Organization'}</div>
+            <div style="color:#475569;">Branch: ${sub.branch_name || 'Main HQ'} (${sub.branch_code || 'HQ'})</div>
+            <div style="color:#475569;">Owner: ${sub.owner_name || 'Client Owner'}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">SUBSCRIPTION DATES:</div>
+            <div style="font-size:13px;color:#0f172a;margin-top:2px;">Start Date: <strong>${formatDate(sub.subscription_start)}</strong></div>
+            <div style="font-size:13px;color:#0f172a;">Expiry Date: <strong>${formatDate(sub.expiry_date)}</strong></div>
+          </div>
+        </div>
+
+        <table class="a4-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Subscription Service Description</th>
+              <th style="text-align:center;">Plan</th>
+              <th style="text-align:right;">Rate (${gs.currency_symbol || '₹'})</th>
+              <th style="text-align:right;">Total (${gs.currency_symbol || '₹'})</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><strong>SaaS Multi-Branch Management System</strong><br><span style="font-size:11px;color:#64748b;">Cloud POS, Inventory Control, Accounting & B2B/B2C Suite</span></td>
+              <td style="text-align:center;">${sub.plan_name || 'Monthly'}</td>
+              <td style="text-align:right;">${fmtNum(sub.subscription_amount || 999, 2)}</td>
+              <td style="text-align:right;font-weight:700;">${fmtNum(sub.subscription_amount || 999, 2)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="a4-summary">
+          <div style="max-width:320px;font-size:11px;color:#64748b;">
+            <strong>Bank & Payment Details:</strong><br>
+            Bank Name: ${gs.bank_name || 'HDFC Bank Ltd'}<br>
+            Account Name: ${gs.account_holder || 'Store Management Systems'}<br>
+            Account No: ${gs.account_number || '50200012345678'}<br>
+            IFSC Code: ${gs.ifsc_code || 'HDFC0001234'} | Branch: ${gs.bank_branch || 'New Delhi'}<br>
+            UPI ID: ${gs.upi_id || 'sms@hdfcbank'}<br><br>
+            <strong>Terms & Notes:</strong><br>
+            ${gs.notes_terms || 'Computer generated SaaS invoice.'}
+          </div>
+
+          <div class="a4-total-box">
+            <div class="a4-total-row grand"><span>Total Amount</span><span>${gs.currency_symbol || '₹'}${fmtNum(sub.subscription_amount || 999, 2)}</span></div>
+            <div class="a4-total-row"><span>Amount Paid</span><span>${gs.currency_symbol || '₹'}${fmtNum(sub.payment_status === 'Paid' ? (sub.subscription_amount || 999) : 0, 2)}</span></div>
+          </div>
+        </div>
+
+        <div class="a4-footer">
+          <div>Authorized Signatory (${gs.signatory_name || 'Director'})</div>
+          <div>${gs.billing_company_name || 'STORE MANAGEMENT SYSTEMS'}</div>
+        </div>
+      </div>
+    `;
+
+    const pa = document.getElementById('printArea');
+    pa.innerHTML = a4Html;
+    pa.style.display = 'block';
+    window.print();
+    pa.style.display = 'none';
+  } catch (e) {
+    alert(e.message || 'Failed to print SaaS subscription invoice');
   }
 }
 

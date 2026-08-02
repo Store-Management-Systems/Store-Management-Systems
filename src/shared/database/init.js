@@ -133,6 +133,9 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('users', 'photo', 'TEXT');
     addColIfMissing('users', 'date_of_joining', 'DATE');
     addColIfMissing('users', 'salary', 'REAL DEFAULT 0');
+    addColIfMissing('users', 'force_password_change', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'last_password_reset_at', 'DATETIME');
+    addColIfMissing('users', 'last_password_reset_by', 'TEXT');
 
     addColIfMissing('organizations', 'subscription_plan', "TEXT DEFAULT 'Standard'");
     addColIfMissing('organizations', 'subscription_status', "TEXT DEFAULT 'Active'");
@@ -145,20 +148,29 @@ if (connectionString && connectionString.startsWith('postgres')) {
     addColIfMissing('organizations', 'subscription_amount', 'REAL DEFAULT 0');
 
     try {
+        sqliteDb.exec(`DROP TABLE IF EXISTS approvals;`);
+        sqliteDb.exec(`DROP TABLE IF EXISTS audit_logs;`);
+    } catch (e) {}
+
+    try {
         sqliteDb.exec(`
-            CREATE TABLE IF NOT EXISTS approvals (
+            CREATE TABLE IF NOT EXISTS subscriptions (
                 id TEXT PRIMARY KEY,
-                shop_id TEXT,
-                requester_id TEXT NOT NULL,
-                requester_name TEXT,
-                type TEXT NOT NULL,
-                entity_id TEXT,
-                title TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                auto_approve_at DATETIME NOT NULL,
+                subscription_id TEXT UNIQUE NOT NULL,
+                organization_id TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                plan_id TEXT DEFAULT 'monthly',
+                plan_name TEXT DEFAULT 'Monthly Plan',
+                subscription_amount REAL DEFAULT 999,
+                payment_status TEXT DEFAULT 'Unpaid',
+                payment_mode TEXT DEFAULT 'Cash',
+                subscription_start DATETIME DEFAULT CURRENT_TIMESTAMP,
+                renewal_date DATETIME,
+                expiry_date DATETIME,
+                auto_renew_enabled INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'Active',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                processed_at DATETIME
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS organizations (
@@ -187,14 +199,13 @@ if (connectionString && connectionString.startsWith('postgres')) {
                 default_currency TEXT DEFAULT '₹',
                 default_price_per_branch REAL DEFAULT 999,
                 session_timeout_minutes INTEGER DEFAULT 15,
-                auto_approval_hours INTEGER DEFAULT 8,
                 system_status TEXT DEFAULT 'Operational',
                 version TEXT DEFAULT 'v2.5.0 SaaS Enterprise',
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
-            INSERT OR IGNORE INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, auto_approval_hours, system_status, version)
-            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 8, 'Operational', 'v2.5.0 SaaS Enterprise');
+            INSERT OR IGNORE INTO platform_settings (id, platform_name, platform_logo, support_email, support_phone, default_currency, default_price_per_branch, session_timeout_minutes, system_status, version)
+            VALUES ('ps_global', 'STORE MANAGEMENT SYSTEMS', 'assets/logos/logo.png', 'support@storemanagementsystems.com', '+1-800-SMS-SaaS', '₹', 999, 15, 'Operational', 'v2.5.0 SaaS Enterprise');
         `);
     } catch (e) {}
 
