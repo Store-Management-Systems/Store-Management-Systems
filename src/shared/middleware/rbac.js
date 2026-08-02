@@ -1,17 +1,19 @@
 const { error } = require('../utils/response');
 
+const isSuperAdminRole = (role) => ['Admin', 'SUPER_ADMIN', 'Super Admin', 'SuperAdmin'].includes(role);
+
 const checkPermission = (requiredPermission) => {
     return (req, res, next) => {
         if (!req.user) {
             return error(res, 'Unauthorized', 401);
         }
 
-        // Admin has full access everywhere
-        if (req.user.role === 'Admin') {
+        // Super Admin has unrestricted access everywhere across all tenants & modules
+        if (isSuperAdminRole(req.user.role)) {
             return next();
         }
 
-        // Owner has full access within their assigned shop
+        // Owner has full access within their assigned organization and branches
         if (req.user.role === 'Owner') {
             return next();
         }
@@ -35,4 +37,4 @@ const checkPermission = (requiredPermission) => {
     };
 };
 
-module.exports = { checkPermission };
+module.exports = { checkPermission, isSuperAdminRole };

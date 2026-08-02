@@ -3,6 +3,7 @@ const { error } = require('../utils/response');
 const { db } = require('../database/init');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_shop_key_2026';
+const isSuperAdminRole = (role) => ['Admin', 'SUPER_ADMIN', 'Super Admin', 'SuperAdmin'].includes(role);
 
 const authenticate = async (req, res, next) => {
     try {
@@ -22,7 +23,7 @@ const authenticate = async (req, res, next) => {
         req.user = decoded;
 
         // DB Status Verification: Prevent disabled users or deleted organization accounts from making requests
-        if (req.user.role !== 'Admin') {
+        if (!isSuperAdminRole(req.user.role)) {
             const dbUser = await db.prepare("SELECT id, role, status, organization_id, shop_id FROM users WHERE id = ?").get(req.user.id);
             if (!dbUser || dbUser.status === 'disabled' || dbUser.status === 'deleted') {
                 return error(res, 'Access revoked: Your user account has been disabled or deleted.', 403);
@@ -52,19 +53,19 @@ const authenticate = async (req, res, next) => {
         }
 
         const targetShopId = req.headers['x-shop-id'] || req.query.shop_id;
-        if (targetShopId && (req.user.role === 'Admin' || req.user.role === 'Owner')) {
+        if (targetShopId && (isSuperAdminRole(req.user.role) || req.user.role === 'Owner')) {
             req.user.active_shop_id = targetShopId;
         } else {
             req.user.active_shop_id = req.user.shop_id;
         }
 
-        next();
+        return next();
     } catch (err) {
-        return error(res, err.message || 'Session expired or invalid token. Please login again.', 401);
+        if (err.name === 'TokenExpiredError') {
+            return error(res, 'Session expired. Please login again.', 401);
+        }
+        return error(res, 'Invalid authentication token.', 401);
     }
 };
 
-module.exports = {
-    authenticate,
-    JWT_SECRET
-};
+module.exports = { authenticate, isSuperAdminRole };

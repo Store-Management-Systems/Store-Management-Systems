@@ -40,6 +40,12 @@ function showToast(title, msg, type = 'info') {
   toast(msg, title, type);
 }
 
+function isSuperAdminUser(user) {
+  if (!user) return false;
+  const role = typeof user === 'string' ? user : user.role;
+  return ['Admin', 'SUPER_ADMIN', 'Super Admin', 'SuperAdmin'].includes(role);
+}
+
 let currentUser = null;
 let activeShopId = null;
 
@@ -504,7 +510,7 @@ function updateRoleUI() {
   const bottomNav = document.getElementById('bottomNav');
   if (!bottomNav) return;
 
-  if (currentUser.role === 'Admin') {
+  if (isSuperAdminUser(currentUser)) {
     bottomNav.innerHTML = `
       <button class="nav-btn ${currentSection === 'dashboard' ? 'active' : ''}" id="nav-dashboard" onclick="showSection('dashboard')">
         <span class="nav-icon">📊</span>Dashboard
@@ -545,7 +551,7 @@ function updateRoleUI() {
 
 // ─── Load Initial Backend Data ────────────────────────────────────────────────
 async function loadInitialData() {
-  if (currentUser && currentUser.role === 'Admin') {
+  if (isSuperAdminUser(currentUser)) {
     // Platform Admin manages SaaS tenants; skip fetching store inventory/billing data
     updateTopbar();
     return;
@@ -3156,46 +3162,9 @@ async function renderSettings(c) {
   // -------------------------------------------------------------
   // 1. GLOBAL SAAS CONFIGURATION CENTER (Super Admin Scope)
   // -------------------------------------------------------------
-  if (role === 'Admin') {
-            </div>
-            <div class="form-group">
-              <label class="form-label">Default Price Per Branch / Month</label>
-              <input type="number" id="psDefaultPricePerBranch" value="${ps.default_price_per_branch || 999}" min="0" step="1">
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3 style="margin-bottom:14px;">🔒 Security & Session Inactivity Rules</h3>
-          <div class="form-group">
-            <label class="form-label">Session Inactivity Timeout (Minutes)</label>
-            <input type="number" id="psSessionTimeout" value="${ps.session_timeout_minutes || 15}" min="1" max="1440">
-          </div>
-        </div>
-
-        <div class="card">
-          <h3 style="margin-bottom:14px;">ℹ Platform System Status & Build</h3>
-          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px;font-size:13px;">
-            <div>System Engine Status: <span class="badge badge-success">${ps.system_status || 'Operational'}</span></div>
-            <div>Build Version: <strong>${ps.version || 'v2.5.0 SaaS Enterprise'}</strong></div>
-          </div>
-        </div>
-
-        <div class="card" style="border:1px solid rgba(255, 59, 48, 0.3);background:rgba(255, 59, 48, 0.03);">
-          <h3 style="color:var(--ios-red);margin-bottom:12px;">🚨 System Backups & Disaster Recovery</h3>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn-secondary" style="padding:12px;" onclick="downloadBackup()">💾 Backup Database</button>
-            <button class="btn-secondary" style="padding:12px;" onclick="openRestoreModal()">📥 Restore Database</button>
-          </div>
-        </div>
-
-        <button class="btn-primary" style="width:100%;padding:14px;font-size:16px;" onclick="submitPlatformSettings()">💾 Save Platform Settings</button>
-      </div>`;
-      return;
-    } catch (err) {
-      c.innerHTML = `<div class="alert alert-warn">Failed to load Platform Settings: ${err.message}</div>`;
-      return;
-    }
+  if (isSuperAdminUser(role)) {
+    renderGlobalSaaSConfigurationCenter(c);
+    return;
   }
 
   // -------------------------------------------------------------
