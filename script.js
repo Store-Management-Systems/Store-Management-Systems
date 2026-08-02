@@ -1,8 +1,44 @@
 const API_URL = (typeof window !== 'undefined' && window.SMS_API_URL)
   ? window.SMS_API_URL
-  : (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin === 'null' || !window.location.origin || (window.location.port && window.location.port !== '3000')))
+  : (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin === 'null' || !window.location.origin))
     ? 'http://localhost:3000/api'
     : '/api';
+
+function toast(msg, title = '', type = 'info') {
+  const container = document.getElementById('toastContainer');
+  if (!container) {
+    console.log(`[Toast ${type}] ${title ? title + ': ' : ''}${msg}`);
+    return;
+  }
+  const el = document.createElement('div');
+  el.className = `toast toast-${type} fade-in`;
+  el.style.cssText = `
+    background: var(--card-bg, #ffffff);
+    color: var(--text-primary, #0f172a);
+    padding: 12px 16px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    border: 1px solid var(--border-light, #e2e8f0);
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 10000;
+  `;
+  el.innerHTML = `<div>${title ? `<strong>${title}</strong><br>` : ''}${msg}</div>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
+function showToast(title, msg, type = 'info') {
+  toast(msg, title, type);
+}
 
 let currentUser = null;
 let activeShopId = null;
@@ -436,6 +472,7 @@ function updateTopbar() {
   }
   if (sidebarLogoImg) {
     sidebarLogoImg.src = logoSrc;
+  }
   if (!currentUser) return;
 
   const userAvatarCircle = document.getElementById('userAvatarCircle');
